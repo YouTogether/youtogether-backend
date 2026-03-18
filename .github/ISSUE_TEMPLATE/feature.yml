@@ -1,0 +1,62 @@
+name: Feature
+description: A new feature or user story to implement
+title: "[FEATURE] "
+labels: ["feature"]
+body:
+  - type: markdown
+    attributes:
+      value: "## User Story"
+  - type: textarea
+    id: user-story
+    attributes:
+      label: User Story
+      description: "As a [role], I want [action], so that [benefit]."
+      placeholder: "As a registered user, I want to create a public room, so that other users can join and watch videos with me."
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: "Detailed functional and technical context."
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: Acceptance Criteria
+      description: "List of verifiable conditions that must be met."
+      placeholder: |
+        - [ ] Criterion 1
+        - [ ] Criterion 2
+    validations:
+      required: true
+  - type: dropdown
+    id: bounded-context
+    attributes:
+      label: Bounded Context
+      options:
+        - Authentication
+        - Room
+        - Video Synchronisation
+        - Infrastructure
+    validations:
+      required: true
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Architectural Layer
+      options:
+        - Domain
+        - Data
+        - Presentation
+        - Cross-cutting
+    validations:
+      required: false
+  - type: input
+    id: estimate
+    attributes:
+      label: Estimate (story points or man-days)
+      placeholder: "2"
+    validations:
+      required: false
