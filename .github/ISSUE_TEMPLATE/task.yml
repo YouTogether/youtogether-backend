@@ -1,0 +1,36 @@
+name: Task
+description: A technical sub-task of a feature
+title: "[TASK] "
+labels: ["task"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: "What this task accomplishes technically."
+    validations:
+      required: true
+  - type: textarea
+    id: done-criteria
+    attributes:
+      label: Definition of Done
+      description: "Specific technical conditions that mark this task as complete."
+      placeholder: |
+        - [ ] Criterion 1
+        - [ ] Criterion 2
+    validations:
+      required: true
+  - type: dropdown
+    id: layer
+    attributes:
+      label: Architectural Layer
+      options:
+        - Domain
+        - Data
+        - Presentation
+        - Test
+        - API
+        - Database
+        - Infrastructure
+    validations:
+      required: true
