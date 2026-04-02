@@ -1,0 +1,160 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job: lint
+  # Runs ESLint with the project ruleset.
+  # Mirrors the local lefthook pre-commit check.
+  # ---------------------------------------------------------------------------
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Check TypeScript compilation
+        run: npm run build --if-present
+
+  # ---------------------------------------------------------------------------
+  # Job: test-unit
+  # Runs Jest unit tests with coverage.
+  # ---------------------------------------------------------------------------
+  test-unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: lint
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests with coverage
+        run: npm run test:cov
+
+      - name: Upload coverage report as artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
+
+  # ---------------------------------------------------------------------------
+  # Job: test-e2e
+  # Runs end-to-end tests against a real PostgreSQL and Firebase emulator.
+  # ---------------------------------------------------------------------------
+  test-e2e:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: lint
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: youtogether
+          POSTGRES_PASSWORD: youtogether_test
+          POSTGRES_DB: youtogether_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run database migrations
+        run: npm run migration:run
+        env:
+          DATABASE_URL: postgresql://youtogether:youtogether_test@localhost:5432/youtogether_test
+
+      - name: Run end-to-end tests
+        run: npm run test:e2e
+        env:
+          DATABASE_URL: postgresql://youtogether:youtogether_test@localhost:5432/youtogether_test
+          NODE_ENV: test
+          JWT_SECRET: ci-test-secret-not-used-in-production
+
+  # ---------------------------------------------------------------------------
+  # Job: build (runs on main branch only)
+  # Verifies that the NestJS application compiles to a distributable artefact.
+  # ---------------------------------------------------------------------------
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: [test-unit, test-e2e]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build production bundle
+        run: npm run build
+
+      - name: Upload build artefact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
