@@ -66,7 +66,6 @@ Closes #
 <!--
   List the tests written or updated in this PR.
   For TDD PRs, indicate which service methods or controllers are now covered.
-  Evidence for RNCP C2.2.2.
 -->
 
 - [ ] Unit tests written / updated for: 
@@ -80,7 +79,6 @@ Closes #
 <!--
   Required for any PR that touches authentication, authorisation, input
   validation, or data exposure. Delete this section if not applicable.
-  Evidence for RNCP C2.2.3 (OWASP alignment).
 -->
 
 - [ ] Input is validated at the DTO level (class-validator)
