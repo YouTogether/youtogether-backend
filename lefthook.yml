@@ -14,37 +14,7 @@
 commit-msg:
   commands:
     validate-conventional-commit:
-      run: |
-        MSG=$(cat {1})
-
-        PATTERN='^(feat|fix|docs|style|refactor|test|chore|ci|build|perf|revert)(\([a-z][a-z0-9-]*\))?: .{1,100}$'
-
-        if echo "$MSG" | grep -qE '^(Merge|Revert) '; then
-          exit 0
-        fi
-
-        if echo "$MSG" | grep -qE '^chore\(main\): release'; then
-          exit 0
-        fi
-
-        if ! echo "$MSG" | grep -qE "$PATTERN"; then
-          echo ""
-          echo "ERROR: Commit message does not conform to the Conventional Commits specification."
-          echo ""
-          echo "Expected format:"
-          echo "  <type>(<scope>): <short description>"
-          echo ""
-          echo "Allowed types: feat, fix, docs, style, refactor, test, chore, ci, build, perf, revert"
-          echo "Examples:"
-          echo "  feat(auth): implement POST /auth/register endpoint"
-          echo "  fix(room): correct foreign key constraint on room deletion"
-          echo "  test(auth): write unit tests for AuthService.login"
-          echo ""
-          echo "Received:"
-          echo "  $MSG"
-          echo ""
-          exit 1
-        fi
+      run: bash .githooks/scripts/validate-commit-msg.sh {1}
 
 # ---------------------------------------------------------------------------
 # pre-commit
@@ -64,33 +34,4 @@ pre-commit:
 pre-push:
   commands:
     validate-branch-name:
-      run: |
-        BRANCH=$(git rev-parse --abbrev-ref HEAD)
-
-        if echo "$BRANCH" | grep -qE '^(main|HEAD)$'; then
-          exit 0
-        fi
-
-        if echo "$BRANCH" | grep -qE '^release-please--'; then
-          exit 0
-        fi
-
-        PATTERN='^(feature|fix|hotfix|refactor|test|docs|chore|ci|release)/[a-z][a-z0-9-]*(/[a-z][a-z0-9-]*)?$'
-
-        if ! echo "$BRANCH" | grep -qE "$PATTERN"; then
-          echo ""
-          echo "ERROR: Branch name does not conform to the project naming convention."
-          echo ""
-          echo "Expected format:"
-          echo "  <type>/<bounded-context>/<short-description>"
-          echo ""
-          echo "Allowed types: feature, fix, hotfix, refactor, test, docs, chore, ci, release"
-          echo "Examples:"
-          echo "  feature/auth/register-endpoint"
-          echo "  fix/room/delete-cascade"
-          echo "  test/auth/auth-service-unit-tests"
-          echo ""
-          echo "Current branch: $BRANCH"
-          echo ""
-          exit 1
-        fi
+      run: bash .githooks/scripts/validate-branch-name.sh
