@@ -34,7 +34,7 @@ export class User {
    * Generated automatically by PostgreSQL.
    */
   @PrimaryGeneratedColumn('uuid')
-  id: string;
+  id!: string;
 
   /**
    * User email — used as the login credential.
@@ -42,7 +42,7 @@ export class User {
    * Uniqueness enforced via partial index (active users only).
    */
   @Column({ type: 'varchar', length: 255, nullable: false })
-  email: string;
+  email!: string;
 
   /**
    * Bcrypt hash of the user password.
@@ -55,14 +55,14 @@ export class User {
     length: 255,
     nullable: false,
   })
-  passwordHash: string;
+  passwordHash!: string;
 
   /**
    * Display name shown in the UI.
    * Non-empty; max 50 characters.
    */
   @Column({ type: 'varchar', length: 50, nullable: false })
-  username: string;
+  username!: string;
 
   /**
    * User role determining access level.
@@ -74,7 +74,7 @@ export class User {
     default: UserRole.REGISTERED,
     nullable: false,
   })
-  role: UserRole;
+  role!: UserRole;
 
   /**
    * SHA-256 hash of the current refresh token.
@@ -88,24 +88,24 @@ export class User {
     nullable: true,
     default: null,
   })
-  refreshTokenHash: string | null;
+  refreshTokenHash!: string | null;
 
   /**
    * Account creation timestamp. Set automatically by TypeORM.
    */
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
-  createdAt: Date;
+  createdAt!: Date;
 
   /**
    * Last profile update timestamp. Updated automatically by TypeORM.
    */
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
-  updatedAt: Date;
+  updatedAt!: Date;
 
   /**
    * Soft-delete timestamp. NULL indicates an active account.
    * Managed by TypeORM's soft-delete mechanism.
    */
   @DeleteDateColumn({ name: 'deleted_at', type: 'timestamptz', nullable: true })
-  deletedAt: Date | null;
+  deletedAt!: Date | null;
 }
