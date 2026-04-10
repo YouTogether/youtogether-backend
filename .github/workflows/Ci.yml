@@ -76,6 +76,55 @@ jobs:
           retention-days: 14
 
   # ---------------------------------------------------------------------------
+  # Job: test-integration
+  # Runs integration tests (migrations, repository contracts) against a real
+  # PostgreSQL instance. Separated from e2e to isolate infrastructure-level
+  # concerns from application-level behaviour.
+  # ---------------------------------------------------------------------------
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: lint
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: youtogether
+          POSTGRES_PASSWORD: youtogether_test
+          POSTGRES_DB: youtogether_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run integration tests
+        run: npm run test:integration
+        env:
+          DB_HOST: localhost
+          DB_PORT: 5432
+          DB_USERNAME: youtogether
+          DB_PASSWORD: youtogether_test
+          DB_TEST_DATABASE: youtogether_test
+
+  # ---------------------------------------------------------------------------
   # Job: test-e2e
   # Runs end-to-end tests against a real PostgreSQL and Firebase emulator.
   # ---------------------------------------------------------------------------
@@ -133,7 +182,7 @@ jobs:
     name: Build
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    needs: [test-unit, test-e2e]
+    needs: [ test-unit, test-integration, test-e2e ]
     if: github.ref == 'refs/heads/main'
 
     steps:
