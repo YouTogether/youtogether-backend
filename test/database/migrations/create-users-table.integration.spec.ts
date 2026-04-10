@@ -8,37 +8,83 @@ import { CreateUsersTable1714000000000 } from '../../../src/database/migrations/
  * These tests execute the migration against a real PostgreSQL database
  * and verify the resulting schema matches the data model specification.
  *
- * Prerequisites:
- * - A PostgreSQL test database must be available.
- * - Connection parameters are read from environment variables or the test
- *   configuration defined in the project's ormconfig/test setup.
+ * The test database (`youtogether_test`) is created automatically if it
+ * does not already exist. Connection parameters are read from environment
+ * variables with sensible defaults for local development.
  *
- * @competency C2.2.2 — Integration test harness for database migrations.
- * @competency C2.3.1 — Test scenario verifying schema correctness.
+ * @competency Integration test harness for database migrations.
+ * @competency Test scenario verifying schema correctness.
  */
 describe('CreateUsersTable Migration (integration)', () => {
   let dataSource: DataSource;
 
+  const DB_HOST = process.env.DB_HOST || 'localhost';
+  const DB_PORT = parseInt(process.env.DB_PORT || '5432', 10);
+  const DB_USERNAME = process.env.DB_USERNAME || '';
+  const DB_PASSWORD = process.env.DB_PASSWORD || '';
+  const DB_TEST_DATABASE = process.env.DB_TEST_DATABASE || 'youtogether_test';
+
+  /**
+   * Connects to the default `postgres` database to create the test database
+   * if it does not exist, then initialises the actual test DataSource.
+   */
   beforeAll(async () => {
+    // Step 1: connect to the default maintenance database
+    const adminDataSource = new DataSource({
+      type: 'postgres',
+      host: DB_HOST,
+      port: DB_PORT,
+      username: DB_USERNAME,
+      password: DB_PASSWORD,
+      database: 'postgres',
+      synchronize: false,
+      logging: false,
+    });
+
+    await adminDataSource.initialize();
+
+    // Step 2: create the test database if it does not exist
+    const existing: unknown = await adminDataSource.query(
+      `SELECT 1
+       FROM pg_database
+       WHERE datname = $1`,
+      [DB_TEST_DATABASE],
+    );
+
+    if (existing.length === 0) {
+      await adminDataSource.query(`CREATE DATABASE "${DB_TEST_DATABASE}"`);
+    }
+
+    await adminDataSource.destroy();
+
+    // Step 3: connect to the test database
     dataSource = new DataSource({
       type: 'postgres',
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '5432', 10),
-      username: process.env.DB_USERNAME || 'postgres',
-      password: process.env.DB_PASSWORD || 'postgres',
-      database: process.env.DB_TEST_DATABASE || 'youtogether_test',
+      host: DB_HOST,
+      port: DB_PORT,
+      username: DB_USERNAME,
+      password: DB_PASSWORD,
+      database: DB_TEST_DATABASE,
       migrations: [],
       synchronize: false,
       logging: false,
     });
 
     await dataSource.initialize();
+
+    // Step 4: run the migration under test
+    const queryRunner = dataSource.createQueryRunner();
+    const migration = new CreateUsersTable1714000000000();
+    await migration.up(queryRunner);
+    await queryRunner.release();
   });
 
   afterAll(async () => {
-    // Clean up: revert migration and close connection
+    // Revert the migration and close the connection
+    const queryRunner = dataSource.createQueryRunner();
     const migration = new CreateUsersTable1714000000000();
-    await migration.down(dataSource.createQueryRunner());
+    await migration.down(queryRunner);
+    await queryRunner.release();
     await dataSource.destroy();
   });
 
