@@ -1,6 +1,6 @@
 import { DataSource } from 'typeorm';
 
-import { CreateUsersTable1714000000000 } from '../../../src/database/migrations/1714000000000-CreateUsersTable';
+import { CreateUsersTable1714000000000 } from '../../../../src/database/migrations/1714000000000-CreateUsersTable';
 
 /**
  * Integration tests for the CreateUsersTable migration (B-A01-T1).
