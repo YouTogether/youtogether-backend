@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { createHash, randomBytes } from 'crypto';
+import { StringValue } from 'ms';
 
 import { UserRole } from '../../domain/enums/user-role.enum';
 import { TokenPair } from '../../domain/value-objects/token-pair.vo';
@@ -71,9 +72,9 @@ export class TokenService {
     const expiresIn = this.configService.get<string>(
       'JWT_ACCESS_EXPIRATION',
       '15m',
-    );
+    ) as StringValue;
 
-    return this.jwtService.signAsync(payload, { expiresIn });
+    return Promise.resolve(this.jwtService.signAsync(payload, { expiresIn }));
   }
 
   /**
@@ -85,8 +86,10 @@ export class TokenService {
    *
    * @returns Opaque refresh token as a hex string.
    */
-  generateRefreshToken(): Promise<string> {
-    return randomBytes(TokenService.REFRESH_TOKEN_BYTES).toString('hex');
+  async generateRefreshToken(): Promise<string> {
+    return Promise.resolve(
+      randomBytes(TokenService.REFRESH_TOKEN_BYTES).toString('hex'),
+    );
   }
 
   /**
