@@ -2,7 +2,6 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import { Test, TestingModule } from '@nestjs/testing';
 import { IsNull, Repository } from 'typeorm';
 import * as bcrypt from 'bcrypt';
-
 import { AuthRepositoryImpl } from '../../../../src/auth/data/repositories/auth-repository.impl';
 import { UserOrmEntity } from '../../../../src/auth/data/entities/user.orm-entity';
 import { TokenService } from '../../../../src/auth/data/services/token.service';
@@ -11,6 +10,8 @@ import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 import { TokenPair } from '../../../../src/auth/domain/value-objects/token-pair.vo';
 import { RegisterParams } from '../../../../src/auth/domain/usecases/register.params';
 import { RegisterResult } from '../../../../src/auth/domain/value-objects/register-result.vo';
+
+jest.mock('bcrypt');
 
 /**
  * Unit tests for AuthRepositoryImpl.
@@ -53,6 +54,8 @@ describe('AuthRepositoryImpl', () => {
   });
 
   beforeEach(async () => {
+    jest.clearAllMocks();
+
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthRepositoryImpl,
@@ -92,6 +95,8 @@ describe('AuthRepositoryImpl', () => {
       });
       tokenService.generateTokenPair.mockResolvedValue(MOCK_TOKENS);
       tokenService.hashRefreshToken.mockReturnValue('hashed_refresh_token');
+
+      (bcrypt.hash as jest.Mock).mockResolvedValue('$2b$12$hashedvalue');
     });
 
     it('should return a RegisterResult with user and tokens on success', async () => {
@@ -144,11 +149,9 @@ describe('AuthRepositoryImpl', () => {
     });
 
     it('should hash the password with bcrypt before saving', async () => {
-      const bcryptHashSpy = jest.spyOn(bcrypt, 'hash');
-
       await authRepository.register(VALID_PARAMS);
 
-      expect(bcryptHashSpy).toHaveBeenCalledWith(VALID_PARAMS.password, 12);
+      expect(bcrypt.hash).toHaveBeenCalledWith(VALID_PARAMS.password, 12);
     });
 
     it('should generate a token pair using the saved user id and role', async () => {
