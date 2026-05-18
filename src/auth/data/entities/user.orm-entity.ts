@@ -8,7 +8,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 
-import { UserRole } from '../enums/user-role.enum';
+import { UserRole } from '../../domain/enums/user-role.enum';
 
 /**
  * User entity — root of the Authentication and Identity bounded context.
@@ -28,7 +28,7 @@ import { UserRole } from '../enums/user-role.enum';
   where: '"deleted_at" IS NULL',
 })
 @Index('IDX_users_deleted_at', ['deletedAt'])
-export class User {
+export class UserOrmEntity {
   /**
    * Universally unique identifier (UUID v4).
    * Generated automatically by PostgreSQL.
