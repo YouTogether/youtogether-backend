@@ -1,11 +1,7 @@
 {
   "compilerOptions": {
     "module": "commonjs",
-    "moduleResolution": "commonjs",
-    "include": [
-      "src/**/*.ts",
-      "test/**/*.ts"
-    ],
+    "moduleResolution": "nodenext",
     "esModuleInterop": true,
     "declaration": true,
     "removeComments": true,
