@@ -64,7 +64,9 @@ describe('AuthController', () => {
     }).compile();
 
     authController = module.get<AuthController>(AuthController);
-    registerUseCase = module.get(RegisterUseCase);
+    registerUseCase = module.get<RegisterUseCase>(
+      RegisterUseCase,
+    ) as jest.Mocked<RegisterUseCase>;
   });
 
   describe('register', () => {

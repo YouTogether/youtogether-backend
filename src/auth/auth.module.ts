@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { StringValue } from 'ms';
 
 import { AuthRepositoryImpl } from './data/repositories/auth-repository.impl';
 import { TokenService } from './data/services/token.service';
@@ -40,7 +41,10 @@ import { AuthController } from './presentation/controllers/auth.controller';
       useFactory: (configService: ConfigService) => ({
         secret: configService.getOrThrow<string>('JWT_SECRET'),
         signOptions: {
-          expiresIn: configService.get<string>('JWT_ACCESS_EXPIRATION', '15m'),
+          expiresIn: configService.get<StringValue>(
+            'JWT_ACCESS_EXPIRATION',
+            '15m',
+          ),
         },
       }),
     }),

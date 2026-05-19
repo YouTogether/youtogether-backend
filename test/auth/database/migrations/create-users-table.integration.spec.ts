@@ -1,314 +1,239 @@
-import { Server } from 'http';
+import { DataSource, QueryRunner } from 'typeorm';
 
-import { INestApplication, ValidationPipe } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { JwtModule } from '@nestjs/jwt';
-import { Test, TestingModule } from '@nestjs/testing';
-import { getDataSourceToken, TypeOrmModule } from '@nestjs/typeorm';
-import request from 'supertest';
-import { DataSource } from 'typeorm';
-
-import { AuthRepositoryImpl } from '../../../../src/auth/data/repositories/auth-repository.impl';
-import { TokenService } from '../../../../src/auth/data/services/token.service';
-import { UserOrmEntity } from '../../../../src/auth/data/entities/user.orm-entity';
-import { IAuthRepository } from '../../../../src/auth/domain/repositories/auth-repository.interface';
-import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
-import { RegisterUseCase } from '../../../../src/auth/domain/usecases/register.usecase';
-import { AuthController } from '../../../../src/auth/presentation/controllers/auth.controller';
-import { DomainExceptionFilter } from '../../../../src/auth/presentation/filters/domain-exception.filter';
 import { CreateUsersTable1714000000000 } from '../../../../src/database/migrations/1714000000000-CreateUsersTable';
 
 /**
- * Shape of the successful registration response body (HTTP 201).
- * Mirrors AuthResponseDto — typed explicitly to eliminate `any` member access.
- */
-interface RegisterSuccessBody {
-  user: {
-    id: string;
-    email: string;
-    username: string;
-    role: UserRole;
-    createdAt: string;
-  };
-  accessToken: string;
-  refreshToken: string;
-}
-
-/**
- * Shape of the NestJS error response body (HTTP 4xx).
- */
-interface ErrorBody {
-  statusCode: number;
-  message: string | string[];
-  error: string;
-}
-
-/**
- * Integration tests for POST /auth/register.
+ * Integration tests for the CreateUsersTable migration.
  *
- * Boots a minimal NestJS application with a real PostgreSQL test database.
- * Uses supertest to send HTTP requests against the live application.
- *
- * Scenarios covered:
- * - 201 Created: valid payload, user created, tokens returned.
- * - 409 Conflict: duplicate email among active users.
- * - 400 Bad Request: missing fields, invalid email, short password.
+ * These tests execute the migration against a real PostgreSQL database
+ * and verify the resulting schema matches the data model specification.
  *
  * Prerequisites:
- * - A PostgreSQL test database (env: DB_TEST_DATABASE).
- * - Migration executed before tests (handled via migrationsRun).
+ * - A PostgreSQL test database must be available.
+ * - Connection parameters are read from environment variables.
  *
- * @competency Integration test harness.
- * @competency Test scenarios and expected results (cahier de recette).
+ * @competency Integration test harness for database migrations.
+ * @competency Test scenarios verifying schema correctness.
  */
-describe('POST /auth/register (integration)', () => {
-  let app: INestApplication;
-  let httpServer: Server;
+
+interface ColumnInfo {
+  column_name: string;
+  data_type: string;
+  is_nullable: string;
+  column_default: string | null;
+  character_maximum_length: number | null;
+}
+
+interface IndexInfo {
+  indexname: string;
+  indexdef: string;
+}
+
+interface TableInfo {
+  table_name: string;
+}
+
+interface EnumInfo {
+  typname: string;
+}
+
+describe('CreateUsersTable Migration (integration)', () => {
   let dataSource: DataSource;
 
   beforeAll(async () => {
-    const module: TestingModule = await Test.createTestingModule({
-      imports: [
-        ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env.test' }),
-        TypeOrmModule.forRootAsync({
-          imports: [ConfigModule],
-          inject: [ConfigService],
-          useFactory: (configService: ConfigService) => ({
-            type: 'postgres',
-            host: configService.get<string>('DB_HOST', 'localhost'),
-            port: configService.get<number>('DB_PORT', 5432),
-            username: configService.get<string>('DB_USERNAME', 'postgres'),
-            password: configService.get<string>('DB_PASSWORD', 'postgres'),
-            database: configService.get<string>(
-              'DB_TEST_DATABASE',
-              'youtogether_test',
-            ),
-            entities: [UserOrmEntity],
-            migrations: [CreateUsersTable1714000000000],
-            migrationsRun: true,
-            synchronize: false,
-            logging: false,
-          }),
-        }),
-        TypeOrmModule.forFeature([UserOrmEntity]),
-        JwtModule.registerAsync({
-          imports: [ConfigModule],
-          inject: [ConfigService],
-          useFactory: (configService: ConfigService) => ({
-            secret: configService.get<string>(
-              'JWT_SECRET',
-              'test-secret-min-32-chars-long!!',
-            ),
-            signOptions: { expiresIn: '15m' },
-          }),
-        }),
-      ],
-      controllers: [AuthController],
-      providers: [
-        RegisterUseCase,
-        TokenService,
-        { provide: IAuthRepository, useClass: AuthRepositoryImpl },
-      ],
-    }).compile();
+    const databaseUrl = process.env.DATABASE_URL;
+    const connectionOptions =
+      databaseUrl !== undefined && databaseUrl !== ''
+        ? { url: databaseUrl }
+        : {
+            host: process.env.DB_HOST ?? 'localhost',
+            port: parseInt(process.env.DB_PORT ?? '5432', 10),
+            username: process.env.DB_USERNAME ?? 'postgres',
+            password: process.env.DB_PASSWORD ?? 'postgres',
+            database: process.env.DB_TEST_DATABASE ?? 'youtogether_test',
+          };
 
-    app = module.createNestApplication();
-    app.useGlobalPipes(
-      new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true }),
-    );
-    app.useGlobalFilters(new DomainExceptionFilter());
-    await app.init();
+    dataSource = new DataSource({
+      type: 'postgres',
+      ...connectionOptions,
+      migrations: [],
+      synchronize: false,
+      logging: false,
+    });
 
-    // Retrieve typed references once — avoids repeated unsafe casts in tests.
-    // getDataSourceToken() returns the DI token for the default DataSource.
-    httpServer = app.getHttpServer() as Server;
-    dataSource = module.get<DataSource>(getDataSourceToken());
+    await dataSource.initialize();
   });
 
   afterAll(async () => {
-    await app.close();
+    const migration = new CreateUsersTable1714000000000();
+    const queryRunner: QueryRunner = dataSource.createQueryRunner();
+    await migration.down(queryRunner);
+    await queryRunner.release();
+    await dataSource.destroy();
   });
 
-  afterEach(async () => {
-    // Remove test-specific rows without affecting unrelated data.
-    await dataSource.query(
+  it('should create the users table with all expected columns', async () => {
+    const queryRunner: QueryRunner = dataSource.createQueryRunner();
+    const migration = new CreateUsersTable1714000000000();
+
+    await migration.up(queryRunner);
+
+    // queryRunner.query() returns Promise<any> — cast the result explicitly.
+    const rawColumns: unknown = await queryRunner.query(`
+        SELECT column_name, data_type, is_nullable, column_default, character_maximum_length
+        FROM information_schema.columns
+        WHERE table_name = 'users'
+        ORDER BY ordinal_position;
+    `);
+
+    const columns = rawColumns as ColumnInfo[];
+    const columnMap = new Map<string, ColumnInfo>(
+      columns.map((c) => [c.column_name, c]),
+    );
+
+    // Verify all expected columns are present
+    expect(columnMap.has('id')).toBe(true);
+    expect(columnMap.has('email')).toBe(true);
+    expect(columnMap.has('password_hash')).toBe(true);
+    expect(columnMap.has('username')).toBe(true);
+    expect(columnMap.has('role')).toBe(true);
+    expect(columnMap.has('refresh_token_hash')).toBe(true);
+    expect(columnMap.has('created_at')).toBe(true);
+    expect(columnMap.has('updated_at')).toBe(true);
+    expect(columnMap.has('deleted_at')).toBe(true);
+
+    // Map.get() returns T | undefined — use optional chaining throughout.
+    expect(columnMap.get('id')?.data_type).toBe('uuid');
+    expect(columnMap.get('id')?.is_nullable).toBe('NO');
+
+    expect(columnMap.get('email')?.character_maximum_length).toBe(255);
+    expect(columnMap.get('email')?.is_nullable).toBe('NO');
+
+    expect(columnMap.get('password_hash')?.character_maximum_length).toBe(255);
+    expect(columnMap.get('password_hash')?.is_nullable).toBe('NO');
+
+    expect(columnMap.get('username')?.character_maximum_length).toBe(50);
+    expect(columnMap.get('username')?.is_nullable).toBe('NO');
+
+    // PostgreSQL reports enum columns as USER-DEFINED in information_schema
+    expect(columnMap.get('role')?.data_type).toBe('USER-DEFINED');
+    expect(columnMap.get('role')?.is_nullable).toBe('NO');
+
+    expect(columnMap.get('refresh_token_hash')?.is_nullable).toBe('YES');
+    expect(columnMap.get('deleted_at')?.is_nullable).toBe('YES');
+
+    await queryRunner.release();
+  });
+
+  it('should create the partial unique index on email for active users', async () => {
+    const rawIndexes: unknown = await dataSource.query(`
+        SELECT indexname, indexdef
+        FROM pg_indexes
+        WHERE tablename = 'users'
+          AND indexname = 'IDX_users_email_active';
+    `);
+
+    const indexes = rawIndexes as IndexInfo[];
+
+    expect(indexes).toHaveLength(1);
+    expect(indexes[0].indexdef).toContain('UNIQUE');
+    expect(indexes[0].indexdef.toLowerCase()).toContain('where');
+    expect(indexes[0].indexdef.toLowerCase()).toContain('deleted_at');
+  });
+
+  it('should create the index on deleted_at', async () => {
+    const rawIndexes: unknown = await dataSource.query(`
+        SELECT indexname
+        FROM pg_indexes
+        WHERE tablename = 'users'
+          AND indexname = 'IDX_users_deleted_at';
+    `);
+
+    const indexes = rawIndexes as { indexname: string }[];
+
+    expect(indexes).toHaveLength(1);
+  });
+
+  it('should be idempotent (running up twice does not throw)', async () => {
+    const queryRunner: QueryRunner = dataSource.createQueryRunner();
+    const migration = new CreateUsersTable1714000000000();
+
+    await expect(migration.up(queryRunner)).resolves.not.toThrow();
+
+    await queryRunner.release();
+  });
+
+  it('should enforce email uniqueness among active users', async () => {
+    const queryRunner: QueryRunner = dataSource.createQueryRunner();
+
+    await queryRunner.query(`
+        INSERT INTO "users" (email, password_hash, username)
+        VALUES ('duplicate@test.com', '$2b$12$fakehashvalue', 'user1');
+    `);
+
+    await expect(
+      queryRunner.query(`
+          INSERT INTO "users" (email, password_hash, username)
+          VALUES ('duplicate@test.com', '$2b$12$fakehashvalue', 'user2');
+      `),
+    ).rejects.toThrow();
+
+    await queryRunner.query(
       `DELETE
        FROM "users"
-       WHERE email LIKE '%@integration-test.com'`,
+       WHERE email = 'duplicate@test.com';`,
     );
+    await queryRunner.release();
   });
 
-  // ─── 201 Created ──────────────────────────────────────────────────
+  it('should allow reuse of email after soft deletion', async () => {
+    const queryRunner: QueryRunner = dataSource.createQueryRunner();
 
-  describe('201 Created', () => {
-    it('should create a user and return user profile with tokens', async () => {
-      const response = await request(httpServer)
-        .post('/auth/register')
-        .send({
-          email: 'valid@integration-test.com',
-          password: 'securepassword',
-          username: 'integrationuser',
-        })
-        .expect(201);
+    await queryRunner.query(`
+        INSERT INTO "users" (email, password_hash, username, deleted_at)
+        VALUES ('reuse@test.com', '$2b$12$fakehashvalue', 'deleted_user', now());
+    `);
 
-      const body = response.body as RegisterSuccessBody;
+    await expect(
+      queryRunner.query(`
+          INSERT INTO "users" (email, password_hash, username)
+          VALUES ('reuse@test.com', '$2b$12$fakehashvalue', 'new_user');
+      `),
+    ).resolves.not.toThrow();
 
-      expect(body.user.email).toBe('valid@integration-test.com');
-      expect(body.user.username).toBe('integrationuser');
-      expect(body.user.role).toBe(UserRole.REGISTERED);
-      expect(body.user.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-      );
-      expect(body.accessToken).toBeDefined();
-      expect(body.refreshToken).toMatch(/^[0-9a-f]{64}$/);
-    });
-
-    it('should not include passwordHash or refreshTokenHash in the response', async () => {
-      const response = await request(httpServer)
-        .post('/auth/register')
-        .send({
-          email: 'noleak@integration-test.com',
-          password: 'securepassword',
-          username: 'noleakuser',
-        })
-        .expect(201);
-
-      const body = response.body as RegisterSuccessBody &
-        Record<string, unknown>;
-      const user = body.user as RegisterSuccessBody['user'] &
-        Record<string, unknown>;
-
-      expect(user.passwordHash).toBeUndefined();
-      expect(user.refreshTokenHash).toBeUndefined();
-    });
-
-    it('should return a well-formed JWT access token', async () => {
-      const response = await request(httpServer)
-        .post('/auth/register')
-        .send({
-          email: 'jwt@integration-test.com',
-          password: 'securepassword',
-          username: 'jwtuser',
-        })
-        .expect(201);
-
-      const body = response.body as RegisterSuccessBody;
-      const parts = body.accessToken.split('.');
-
-      expect(parts).toHaveLength(3);
-    });
+    await queryRunner.query(
+      `DELETE
+       FROM "users"
+       WHERE email = 'reuse@test.com';`,
+    );
+    await queryRunner.release();
   });
 
-  // ─── 409 Conflict ─────────────────────────────────────────────────
+  it('should revert cleanly (down removes table and enum)', async () => {
+    const queryRunner: QueryRunner = dataSource.createQueryRunner();
+    const migration = new CreateUsersTable1714000000000();
 
-  describe('409 Conflict', () => {
-    it('should return 409 when the email is already registered to an active user', async () => {
-      await request(httpServer)
-        .post('/auth/register')
-        .send({
-          email: 'duplicate@integration-test.com',
-          password: 'securepassword',
-          username: 'firstuser',
-        })
-        .expect(201);
+    await migration.down(queryRunner);
 
-      await request(httpServer)
-        .post('/auth/register')
-        .send({
-          email: 'duplicate@integration-test.com',
-          password: 'anotherpassword',
-          username: 'seconduser',
-        })
-        .expect(409);
-    });
+    const rawTables: unknown = await queryRunner.query(`
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_name = 'users'
+          AND table_schema = 'public';
+    `);
+    const tables = rawTables as TableInfo[];
+    expect(tables).toHaveLength(0);
 
-    it('should include the conflicting email in the 409 error message', async () => {
-      await request(httpServer)
-        .post('/auth/register')
-        .send({
-          email: 'msg409@integration-test.com',
-          password: 'pass1234',
-          username: 'u1',
-        })
-        .expect(201);
+    const rawEnums: unknown = await queryRunner.query(`
+        SELECT typname
+        FROM pg_type
+        WHERE typname = 'user_role';
+    `);
+    const enums = rawEnums as EnumInfo[];
+    expect(enums).toHaveLength(0);
 
-      const response = await request(httpServer)
-        .post('/auth/register')
-        .send({
-          email: 'msg409@integration-test.com',
-          password: 'pass5678',
-          username: 'u2',
-        })
-        .expect(409);
-
-      const body = response.body as ErrorBody;
-
-      expect(body.message).toContain('msg409@integration-test.com');
-    });
-  });
-
-  // ─── 400 Bad Request ──────────────────────────────────────────────
-
-  describe('400 Bad Request', () => {
-    it('should return 400 when email is missing', async () => {
-      await request(httpServer)
-        .post('/auth/register')
-        .send({ password: 'securepassword', username: 'user' })
-        .expect(400);
-    });
-
-    it('should return 400 when email is not a valid address', async () => {
-      await request(httpServer)
-        .post('/auth/register')
-        .send({
-          email: 'not-an-email',
-          password: 'securepassword',
-          username: 'user',
-        })
-        .expect(400);
-    });
-
-    it('should return 400 when password is shorter than 8 characters', async () => {
-      await request(httpServer)
-        .post('/auth/register')
-        .send({
-          email: 'short@integration-test.com',
-          password: '1234567',
-          username: 'user',
-        })
-        .expect(400);
-    });
-
-    it('should return 400 when username is missing', async () => {
-      await request(httpServer)
-        .post('/auth/register')
-        .send({
-          email: 'nousername@integration-test.com',
-          password: 'securepassword',
-        })
-        .expect(400);
-    });
-
-    it('should return 400 when username exceeds 50 characters', async () => {
-      await request(httpServer)
-        .post('/auth/register')
-        .send({
-          email: 'longname@integration-test.com',
-          password: 'securepassword',
-          username: 'a'.repeat(51),
-        })
-        .expect(400);
-    });
-
-    it('should return 400 when unknown fields are sent (whitelist enforcement)', async () => {
-      await request(httpServer)
-        .post('/auth/register')
-        .send({
-          email: 'extra@integration-test.com',
-          password: 'securepassword',
-          username: 'user',
-          role: 'admin',
-        })
-        .expect(400);
-    });
+    // Re-run up so afterAll cleanup has a table to drop
+    await migration.up(queryRunner);
+    await queryRunner.release();
   });
 });

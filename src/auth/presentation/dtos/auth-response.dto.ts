@@ -5,11 +5,13 @@ import { UserRole } from '../../domain/enums/user-role.enum';
  * Excludes all sensitive fields (passwordHash, refreshTokenHash).
  */
 export class UserProfileDto {
-  id!: string;
-  email!: string;
-  username!: string;
-  role!: UserRole;
-  createdAt!: Date;
+  constructor(
+    public readonly id: string,
+    public readonly email: string,
+    public readonly username: string,
+    public readonly role: UserRole,
+    public readonly createdAt: Date,
+  ) {}
 }
 
 /**
@@ -27,9 +29,11 @@ export class UserProfileDto {
  * @see IAuthRemoteDataSource.register
  */
 export class AuthResponseDto {
-  user!: UserProfileDto;
-  accessToken!: string;
-  refreshToken!: string;
+  constructor(
+    public readonly user: UserProfileDto,
+    public readonly accessToken: string,
+    public readonly refreshToken: string,
+  ) {}
 
   static fromRegisterResult(params: {
     id: string;
@@ -40,16 +44,16 @@ export class AuthResponseDto {
     accessToken: string;
     refreshToken: string;
   }): AuthResponseDto {
-    const dto = new AuthResponseDto();
-    dto.user = {
-      id: params.id,
-      email: params.email,
-      username: params.username,
-      role: params.role,
-      createdAt: params.createdAt,
-    };
-    dto.accessToken = params.accessToken;
-    dto.refreshToken = params.refreshToken;
-    return dto;
+    return new AuthResponseDto(
+      new UserProfileDto(
+        params.id,
+        params.email,
+        params.username,
+        params.role,
+        params.createdAt,
+      ),
+      params.accessToken,
+      params.refreshToken,
+    );
   }
 }

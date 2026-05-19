@@ -69,36 +69,71 @@ describe('POST /auth/register (integration)', () => {
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
       imports: [
-        ConfigModule.forRoot({ isGlobal: true, envFilePath: '.env.test' }),
+        ConfigModule.forRoot({
+          isGlobal: true,
+          envFilePath: '.env.test',
+          // In CI, DATABASE_URL is injected into process.env. When present,
+          // ignore any committed .env.test so its local values cannot override
+          // the CI-provided connection string. Locally (no DATABASE_URL), the
+          // .env.test file is loaded as usual.
+          ignoreEnvFile: process.env.DATABASE_URL !== undefined,
+        }),
         TypeOrmModule.forRootAsync({
           imports: [ConfigModule],
           inject: [ConfigService],
-          useFactory: (configService: ConfigService) => ({
-            type: 'postgres',
-            host: configService.get<string>('DB_HOST', 'localhost'),
-            port: configService.get<number>('DB_PORT', 5432),
-            username: configService.get<string>('DB_USERNAME', 'postgres'),
-            password: configService.get<string>('DB_PASSWORD', 'postgres'),
-            database: configService.get<string>(
-              'DB_TEST_DATABASE',
-              'youtogether_test',
-            ),
-            entities: [UserOrmEntity],
-            migrations: [CreateUsersTable1714000000000],
-            migrationsRun: true,
-            synchronize: false,
-            logging: false,
-          }),
+          useFactory: (configService: ConfigService) => {
+            // DATABASE_URL is read directly from process.env rather than via
+            // ConfigService. In CI the variable is injected into the process
+            // environment, and reading it directly avoids any ConfigModule
+            // subtlety (validation schema, missing env file) that could cause
+            // get('DATABASE_URL') to return undefined and silently fall back to
+            // the local 'postgres' credentials. The discrete DB_* variables
+            // remain ConfigService-driven for local-dev convenience.
+            const databaseUrl = process.env.DATABASE_URL;
+            const connection =
+              databaseUrl !== undefined && databaseUrl !== ''
+                ? { url: databaseUrl }
+                : {
+                    host: configService.get<string>('DB_HOST', 'localhost'),
+                    port: configService.get<number>('DB_PORT', 5432),
+                    username: configService.get<string>(
+                      'DB_USERNAME',
+                      'postgres',
+                    ),
+                    password: configService.get<string>(
+                      'DB_PASSWORD',
+                      'postgres',
+                    ),
+                    database: configService.get<string>(
+                      'DB_TEST_DATABASE',
+                      'youtogether_test',
+                    ),
+                  };
+
+            return {
+              type: 'postgres' as const,
+              ...connection,
+              entities: [UserOrmEntity],
+              migrations: [CreateUsersTable1714000000000],
+              // Drop the entire schema before connecting, then run migrations
+              // from scratch. Guarantees a deterministic state for every test
+              // run regardless of what previous test suites left behind.
+              dropSchema: true,
+              migrationsRun: true,
+              synchronize: false,
+              // Surface database errors in test output so 500 responses are
+              // diagnosable. SQL queries are not logged (noise reduction).
+              logging: ['error' as const],
+            };
+          },
         }),
         TypeOrmModule.forFeature([UserOrmEntity]),
         JwtModule.registerAsync({
-          imports: [ConfigModule],
-          inject: [ConfigService],
-          useFactory: (configService: ConfigService) => ({
-            secret: configService.get<string>(
-              'JWT_SECRET',
-              'test-secret-min-32-chars-long!!',
-            ),
+          useFactory: () => ({
+            // Read directly from process.env with a test fallback, consistent
+            // with the DATABASE_URL handling above. In CI the secret is injected
+            // into the process environment; locally the fallback applies.
+            secret: process.env.JWT_SECRET ?? 'test-secret-min-32-chars-long!!',
             signOptions: { expiresIn: '15m' },
           }),
         }),

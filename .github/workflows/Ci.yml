@@ -91,9 +91,9 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: youtogether
-          POSTGRES_PASSWORD: youtogether_test
-          POSTGRES_DB: youtogether_test
+          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.CI_POSTGRES_DB }}
         ports:
           - 5432:5432
         options: >-
@@ -118,11 +118,10 @@ jobs:
       - name: Run integration tests
         run: npm run test:integration
         env:
-          DB_HOST: localhost
-          DB_PORT: 5432
-          DB_USERNAME: youtogether
-          DB_PASSWORD: youtogether_test
-          DB_TEST_DATABASE: youtogether_test
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
+          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+          DB_DATABASE: ${{ secrets.CI_POSTGRES_DB }}
 
   # ---------------------------------------------------------------------------
   # Job: test-e2e
@@ -138,9 +137,9 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: youtogether
-          POSTGRES_PASSWORD: youtogether_test
-          POSTGRES_DB: youtogether_test
+          POSTGRES_USER: ${{ secrets.CI_POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ secrets.CI_POSTGRES_DB }}
         ports:
           - 5432:5432
         options: >-
@@ -165,14 +164,14 @@ jobs:
       - name: Run database migrations
         run: npm run migration:run
         env:
-          DATABASE_URL: postgresql://youtogether:youtogether_test@localhost:5432/youtogether_test
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
 
       - name: Run end-to-end tests
         run: npm run test:e2e
         env:
-          DATABASE_URL: postgresql://youtogether:youtogether_test@localhost:5432/youtogether_test
+          DATABASE_URL: postgresql://${{ secrets.CI_POSTGRES_USER }}:${{ secrets.CI_POSTGRES_PASSWORD }}@localhost:5432/${{ secrets.CI_POSTGRES_DB }}
           NODE_ENV: test
-          JWT_SECRET: ci-test-secret-not-used-in-production
+          JWT_SECRET: ${{ secrets.CI_JWT_SECRET }}
 
   # ---------------------------------------------------------------------------
   # Job: build (runs on main branch only)
