@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 
 import { IAuthRepository } from '../repositories/auth-repository.interface';
 import { RegisterParams } from './register.params';
-import { RegisterResult } from './register-result.vo';
+import { RegisterResult } from '../value-objects/register-result.vo';
 
 /**
  * Use case for user registration.

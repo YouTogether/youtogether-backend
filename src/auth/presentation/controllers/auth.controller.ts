@@ -57,9 +57,7 @@ export class AuthController {
       username: dto.username,
     });
 
-    const result = (await this.registerUseCase.execute(
-      params,
-    )) as RegisterResult;
+    const result = await this.registerUseCase.execute(params);
     return this.toAuthResponse(result);
   }
 
