@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { StringValue } from 'ms';
 
@@ -10,31 +11,36 @@ import { UserOrmEntity } from './data/entities/user.orm-entity';
 import { IAuthRepository } from './domain/repositories/auth-repository.interface';
 import { RegisterUseCase } from './domain/usecases/register.usecase';
 import { AuthController } from './presentation/controllers/auth.controller';
+import { JwtAuthGuard } from './presentation/guards/jwt-auth.guard';
+import { JwtStrategy } from './presentation/strategies/jwt.strategy';
 
 /**
  * NestJS module for the Authentication bounded context.
  *
  * Wires together all layers of the Clean Architecture:
  * - Domain layer: {@link RegisterUseCase} and {@link IAuthRepository} (port).
- * - Data layer: {@link AuthRepositoryImpl} (port implementation), {@link TokenService}.
- * - Presentation layer: {@link AuthController}.
+ * - Data layer: {@link AuthRepositoryImpl}, {@link TokenService}.
+ * - Presentation layer: {@link AuthController}, {@link JwtStrategy},
+ *   {@link JwtAuthGuard}.
  *
  * The {@link IAuthRepository} abstract class is bound to {@link AuthRepositoryImpl}
  * via the `useClass` provider, implementing the dependency inversion principle.
- * Domain use cases depend on the abstract port; the module resolves the
- * concrete implementation at runtime.
+ *
+ * {@link PassportModule} registers the default strategy as `'jwt'`. The
+ * {@link JwtStrategy} and {@link JwtAuthGuard} are exported so that other
+ * modules (room, video) can protect their own routes without redefining
+ * authentication logic.
  *
  * JWT configuration is deferred to {@link JwtModule.registerAsync} to read
- * secrets from environment variables via {@link ConfigService}, ensuring that
- * secrets are never hardcoded.
+ * secrets from environment variables via {@link ConfigService}.
  *
- * @see RegisterUseCase
- * @see AuthRepositoryImpl
- * @see TokenService
+ * @see JwtStrategy
+ * @see JwtAuthGuard
  */
 @Module({
   imports: [
     TypeOrmModule.forFeature([UserOrmEntity]),
+    PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -53,11 +59,13 @@ import { AuthController } from './presentation/controllers/auth.controller';
   providers: [
     RegisterUseCase,
     TokenService,
+    JwtStrategy,
+    JwtAuthGuard,
     {
       provide: IAuthRepository,
       useClass: AuthRepositoryImpl,
     },
   ],
-  exports: [TokenService],
+  exports: [TokenService, JwtAuthGuard, PassportModule],
 })
 export class AuthModule {}
