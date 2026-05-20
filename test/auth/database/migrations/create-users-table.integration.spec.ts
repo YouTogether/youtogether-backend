@@ -1,119 +1,97 @@
-import { DataSource } from 'typeorm';
+import { DataSource, QueryRunner } from 'typeorm';
 
 import { CreateUsersTable1714000000000 } from '../../../../src/database/migrations/1714000000000-CreateUsersTable';
 
 /**
- * Integration tests for the CreateUsersTable migration (B-A01-T1).
+ * Integration tests for the CreateUsersTable migration.
  *
  * These tests execute the migration against a real PostgreSQL database
  * and verify the resulting schema matches the data model specification.
  *
- * The test database (`youtogether_test`) is created automatically if it
- * does not already exist. Connection parameters are read from environment
- * variables with sensible defaults for local development.
+ * Prerequisites:
+ * - A PostgreSQL test database must be available.
+ * - Connection parameters are read from environment variables.
  *
  * @competency Integration test harness for database migrations.
- * @competency Test scenario verifying schema correctness.
+ * @competency Test scenarios verifying schema correctness.
  */
+
+interface ColumnInfo {
+  column_name: string;
+  data_type: string;
+  is_nullable: string;
+  column_default: string | null;
+  character_maximum_length: number | null;
+}
+
+interface IndexInfo {
+  indexname: string;
+  indexdef: string;
+}
+
+interface TableInfo {
+  table_name: string;
+}
+
+interface EnumInfo {
+  typname: string;
+}
+
 describe('CreateUsersTable Migration (integration)', () => {
   let dataSource: DataSource;
 
-  const DB_HOST = process.env.DB_HOST || 'localhost';
-  const DB_PORT = parseInt(process.env.DB_PORT || '5432', 10);
-  const DB_USERNAME = process.env.DB_USERNAME || '';
-  const DB_PASSWORD = process.env.DB_PASSWORD || '';
-  const DB_TEST_DATABASE = process.env.DB_TEST_DATABASE || 'youtogether_test';
-
-  /**
-   * Connects to the default `postgres` database to create the test database
-   * if it does not exist, then initialises the actual test DataSource.
-   */
   beforeAll(async () => {
-    // Step 1: connect to the default maintenance database
-    const adminDataSource = new DataSource({
-      type: 'postgres',
-      host: DB_HOST,
-      port: DB_PORT,
-      username: DB_USERNAME,
-      password: DB_PASSWORD,
-      database: 'postgres',
-      synchronize: false,
-      logging: false,
-    });
+    const databaseUrl = process.env.DATABASE_URL;
+    const connectionOptions =
+      databaseUrl !== undefined && databaseUrl !== ''
+        ? { url: databaseUrl }
+        : {
+            host: process.env.DB_HOST ?? 'localhost',
+            port: parseInt(process.env.DB_PORT ?? '5432', 10),
+            username: process.env.DB_USERNAME ?? 'postgres',
+            password: process.env.DB_PASSWORD ?? 'postgres',
+            database: process.env.DB_TEST_DATABASE ?? 'youtogether_test',
+          };
 
-    await adminDataSource.initialize();
-
-    // Step 2: create the test database if it does not exist
-    const existing: unknown = await adminDataSource.query(
-      `SELECT 1
-       FROM pg_database
-       WHERE datname = $1`,
-      [DB_TEST_DATABASE],
-    );
-
-    if (existing.length === 0) {
-      await adminDataSource.query(`CREATE DATABASE "${DB_TEST_DATABASE}"`);
-    }
-
-    await adminDataSource.destroy();
-
-    // Step 3: connect to the test database
     dataSource = new DataSource({
       type: 'postgres',
-      host: DB_HOST,
-      port: DB_PORT,
-      username: DB_USERNAME,
-      password: DB_PASSWORD,
-      database: DB_TEST_DATABASE,
+      ...connectionOptions,
       migrations: [],
       synchronize: false,
       logging: false,
     });
 
     await dataSource.initialize();
-
-    // Step 4: run the migration under test
-    const queryRunner = dataSource.createQueryRunner();
-    const migration = new CreateUsersTable1714000000000();
-    await migration.up(queryRunner);
-    await queryRunner.release();
   });
 
   afterAll(async () => {
-    // Revert the migration and close the connection
-    const queryRunner = dataSource.createQueryRunner();
     const migration = new CreateUsersTable1714000000000();
+    const queryRunner: QueryRunner = dataSource.createQueryRunner();
     await migration.down(queryRunner);
     await queryRunner.release();
     await dataSource.destroy();
   });
 
   it('should create the users table with all expected columns', async () => {
-    const queryRunner = dataSource.createQueryRunner();
+    const queryRunner: QueryRunner = dataSource.createQueryRunner();
     const migration = new CreateUsersTable1714000000000();
 
     await migration.up(queryRunner);
 
-    type ColumnInfo = {
-      column_name: string;
-      data_type: string;
-      is_nullable: 'YES' | 'NO';
-      column_default: string | null;
-      character_maximum_length: number | null;
-    };
-
-    const columns: ColumnInfo[] = await queryRunner.query<ColumnInfo>(`
+    // queryRunner.query() returns Promise<any> — cast the result explicitly.
+    const rawColumns: unknown = await queryRunner.query(`
         SELECT column_name, data_type, is_nullable, column_default, character_maximum_length
         FROM information_schema.columns
         WHERE table_name = 'users'
         ORDER BY ordinal_position;
     `);
 
+    const columns = rawColumns as ColumnInfo[];
     const columnMap = new Map<string, ColumnInfo>(
       columns.map((c) => [c.column_name, c]),
     );
 
-    // Verify all expected columns exist
+    // Verify all expected columns are present
     expect(columnMap.has('id')).toBe(true);
     expect(columnMap.has('email')).toBe(true);
     expect(columnMap.has('password_hash')).toBe(true);
@@ -124,47 +102,38 @@ describe('CreateUsersTable Migration (integration)', () => {
     expect(columnMap.has('updated_at')).toBe(true);
     expect(columnMap.has('deleted_at')).toBe(true);
 
-    // Verify UUID primary key
-    expect(columnMap.get('id').data_type).toBe('uuid');
-    expect(columnMap.get('id').is_nullable).toBe('NO');
+    // Map.get() returns T | undefined — use optional chaining throughout.
+    expect(columnMap.get('id')?.data_type).toBe('uuid');
+    expect(columnMap.get('id')?.is_nullable).toBe('NO');
 
-    // Verify email constraints
-    expect(columnMap.get('email').character_maximum_length).toBe(255);
-    expect(columnMap.get('email').is_nullable).toBe('NO');
+    expect(columnMap.get('email')?.character_maximum_length).toBe(255);
+    expect(columnMap.get('email')?.is_nullable).toBe('NO');
 
-    // Verify password_hash constraints
-    expect(columnMap.get('password_hash').character_maximum_length).toBe(255);
-    expect(columnMap.get('password_hash').is_nullable).toBe('NO');
+    expect(columnMap.get('password_hash')?.character_maximum_length).toBe(255);
+    expect(columnMap.get('password_hash')?.is_nullable).toBe('NO');
 
-    // Verify username constraints
-    expect(columnMap.get('username').character_maximum_length).toBe(50);
-    expect(columnMap.get('username').is_nullable).toBe('NO');
+    expect(columnMap.get('username')?.character_maximum_length).toBe(50);
+    expect(columnMap.get('username')?.is_nullable).toBe('NO');
 
-    // Verify role uses the user_role enum type (USER-DEFINED in information_schema)
-    expect(columnMap.get('role').data_type).toBe('USER-DEFINED');
-    expect(columnMap.get('role').is_nullable).toBe('NO');
+    // PostgreSQL reports enum columns as USER-DEFINED in information_schema
+    expect(columnMap.get('role')?.data_type).toBe('USER-DEFINED');
+    expect(columnMap.get('role')?.is_nullable).toBe('NO');
 
-    // Verify refresh_token_hash is nullable
-    expect(columnMap.get('refresh_token_hash').is_nullable).toBe('YES');
-
-    // Verify soft-delete column is nullable
-    expect(columnMap.get('deleted_at').is_nullable).toBe('YES');
+    expect(columnMap.get('refresh_token_hash')?.is_nullable).toBe('YES');
+    expect(columnMap.get('deleted_at')?.is_nullable).toBe('YES');
 
     await queryRunner.release();
   });
 
   it('should create the partial unique index on email for active users', async () => {
-    type IndexInfo = {
-      indexname: string;
-      indexdef: string;
-    };
-
-    const indexes: IndexInfo[] = await dataSource.query(`
+    const rawIndexes: unknown = await dataSource.query(`
         SELECT indexname, indexdef
         FROM pg_indexes
         WHERE tablename = 'users'
           AND indexname = 'IDX_users_email_active';
     `);
+
+    const indexes = rawIndexes as IndexInfo[];
 
     expect(indexes).toHaveLength(1);
     expect(indexes[0].indexdef).toContain('UNIQUE');
@@ -173,41 +142,35 @@ describe('CreateUsersTable Migration (integration)', () => {
   });
 
   it('should create the index on deleted_at', async () => {
-    type IndexInfo = {
-      indexname: string;
-      indexdef: string;
-    };
-
-    const indexes: IndexInfo[] = await dataSource.query(`
+    const rawIndexes: unknown = await dataSource.query(`
         SELECT indexname
         FROM pg_indexes
         WHERE tablename = 'users'
           AND indexname = 'IDX_users_deleted_at';
     `);
 
+    const indexes = rawIndexes as { indexname: string }[];
+
     expect(indexes).toHaveLength(1);
   });
 
   it('should be idempotent (running up twice does not throw)', async () => {
-    const queryRunner = dataSource.createQueryRunner();
+    const queryRunner: QueryRunner = dataSource.createQueryRunner();
     const migration = new CreateUsersTable1714000000000();
 
-    // The migration uses IF NOT EXISTS, so a second run should not fail.
     await expect(migration.up(queryRunner)).resolves.not.toThrow();
 
     await queryRunner.release();
   });
 
   it('should enforce email uniqueness among active users', async () => {
-    const queryRunner = dataSource.createQueryRunner();
+    const queryRunner: QueryRunner = dataSource.createQueryRunner();
 
-    // Insert a first user
     await queryRunner.query(`
         INSERT INTO "users" (email, password_hash, username)
         VALUES ('duplicate@test.com', '$2b$12$fakehashvalue', 'user1');
     `);
 
-    // Attempt to insert a second active user with the same email
     await expect(
       queryRunner.query(`
           INSERT INTO "users" (email, password_hash, username)
@@ -215,23 +178,22 @@ describe('CreateUsersTable Migration (integration)', () => {
       `),
     ).rejects.toThrow();
 
-    // Clean up
-    await queryRunner.query(`DELETE
-                             FROM "users"
-                             WHERE email = 'duplicate@test.com';`);
+    await queryRunner.query(
+      `DELETE
+       FROM "users"
+       WHERE email = 'duplicate@test.com';`,
+    );
     await queryRunner.release();
   });
 
   it('should allow reuse of email after soft deletion', async () => {
-    const queryRunner = dataSource.createQueryRunner();
+    const queryRunner: QueryRunner = dataSource.createQueryRunner();
 
-    // Insert and soft-delete a user
     await queryRunner.query(`
         INSERT INTO "users" (email, password_hash, username, deleted_at)
         VALUES ('reuse@test.com', '$2b$12$fakehashvalue', 'deleted_user', now());
     `);
 
-    // Insert a new active user with the same email — should succeed
     await expect(
       queryRunner.query(`
           INSERT INTO "users" (email, password_hash, username)
@@ -239,38 +201,38 @@ describe('CreateUsersTable Migration (integration)', () => {
       `),
     ).resolves.not.toThrow();
 
-    // Clean up
-    await queryRunner.query(`DELETE
-                             FROM "users"
-                             WHERE email = 'reuse@test.com';`);
+    await queryRunner.query(
+      `DELETE
+       FROM "users"
+       WHERE email = 'reuse@test.com';`,
+    );
     await queryRunner.release();
   });
 
   it('should revert cleanly (down removes table and enum)', async () => {
-    const queryRunner = dataSource.createQueryRunner();
+    const queryRunner: QueryRunner = dataSource.createQueryRunner();
     const migration = new CreateUsersTable1714000000000();
 
     await migration.down(queryRunner);
 
-    type TableInfo = { table_name: string };
-    type EnumInfo = { typname: string };
-
-    const tables: TableInfo[] = await queryRunner.query<TableInfo>(`
+    const rawTables: unknown = await queryRunner.query(`
         SELECT table_name
         FROM information_schema.tables
         WHERE table_name = 'users'
           AND table_schema = 'public';
     `);
+    const tables = rawTables as TableInfo[];
     expect(tables).toHaveLength(0);
 
-    const enums: EnumInfo[] = await queryRunner.query<EnumInfo>(`
+    const rawEnums: unknown = await queryRunner.query(`
         SELECT typname
         FROM pg_type
         WHERE typname = 'user_role';
     `);
+    const enums = rawEnums as EnumInfo[];
     expect(enums).toHaveLength(0);
 
-    // Re-run up for other tests or afterAll cleanup
+    // Re-run up so afterAll cleanup has a table to drop
     await migration.up(queryRunner);
     await queryRunner.release();
   });

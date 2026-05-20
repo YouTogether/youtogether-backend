@@ -4,6 +4,21 @@ import eslintPluginPrettierRecommended from 'eslint-plugin-prettier/recommended'
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
+// Normalize path separators for cross-platform compatibility.
+//
+// `import.meta.dirname` returns OS-native separators: backslashes on Windows
+// (e.g. C:\Users\...) and forward slashes on Linux/macOS (/home/runner/...).
+//
+// TypeScript resolves tsconfig paths using forward slashes internally via its
+// own `normalizePath()`. When `project` receives a backslash path from Node on
+// Windows, TypeScript's internal assertion `resolvedPath === normalizedPath`
+// fails with "Debug Failure. Expected A === B".
+//
+// Converting to forward slashes before passing the path to `parserOptions`
+// ensures TypeScript receives a path it has already normalised, eliminating
+// the mismatch on both Windows and Linux CI runners.
+const rootDir = import.meta.dirname.replace(/\\/g, '/');
+
 export default tseslint.config(
   {
     ignores: ['eslint.config.mjs'],
@@ -19,7 +34,9 @@ export default tseslint.config(
       },
       sourceType: 'commonjs',
       parserOptions: {
-        projectService: true,
+        projectService: {
+          defaultProject: 'tsconfig.eslint.json',
+        },
         tsconfigRootDir: import.meta.dirname,
       },
     },

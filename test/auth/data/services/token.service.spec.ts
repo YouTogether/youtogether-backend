@@ -47,12 +47,14 @@ describe('TokenService', () => {
           useValue: {
             get: jest
               .fn()
-              .mockImplementation((key: string, defaultValue?: string) => {
-                const config: Record<string, string> = {
-                  JWT_ACCESS_EXPIRATION: '15m',
-                };
-                return config[key] ?? defaultValue;
-              }),
+              .mockImplementation(
+                (key: string, defaultValue?: unknown): unknown => {
+                  const config: Record<string, string> = {
+                    JWT_ACCESS_EXPIRATION: '15m',
+                  };
+                  return config[key] ?? defaultValue;
+                },
+              ),
           },
         },
       ],
@@ -87,7 +89,7 @@ describe('TokenService', () => {
 
     it('should use the configured expiration from ConfigService', async () => {
       configService.get.mockImplementation(
-        (key: string, defaultValue?: string) => {
+        (key: string, defaultValue?: unknown): unknown => {
           if (key === 'JWT_ACCESS_EXPIRATION') return '30m';
           return defaultValue;
         },
@@ -103,7 +105,7 @@ describe('TokenService', () => {
 
     it('should default to 15m if JWT_ACCESS_EXPIRATION is not configured', async () => {
       configService.get.mockImplementation(
-        (_key: string, defaultValue?: string) => {
+        (_key: string, defaultValue?: unknown): unknown => {
           return defaultValue;
         },
       );
