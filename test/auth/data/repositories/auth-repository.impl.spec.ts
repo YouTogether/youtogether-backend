@@ -9,7 +9,7 @@ import { EmailAlreadyInUseFailure } from '../../../../src/auth/domain/failures/a
 import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 import { TokenPair } from '../../../../src/auth/domain/value-objects/token-pair.vo';
 import { RegisterParams } from '../../../../src/auth/domain/usecases/register.params';
-import { RegisterResult } from '../../../../src/auth/domain/value-objects/register-result.vo';
+import { AuthResult } from '../../../../src/auth/domain/value-objects/auth-result.vo';
 
 jest.mock('bcrypt');
 
@@ -99,10 +99,10 @@ describe('AuthRepositoryImpl', () => {
       (bcrypt.hash as jest.Mock).mockResolvedValue('$2b$12$hashedvalue');
     });
 
-    it('should return a RegisterResult with user and tokens on success', async () => {
+    it('should return a AuthResult with user and tokens on success', async () => {
       const result = await authRepository.register(VALID_PARAMS);
 
-      expect(result).toBeInstanceOf(RegisterResult);
+      expect(result).toBeInstanceOf(AuthResult);
       expect(result.user.email).toBe('new@example.com');
       expect(result.user.username).toBe('newuser');
       expect(result.tokens).toBe(MOCK_TOKENS);
