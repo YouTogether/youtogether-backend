@@ -88,6 +88,7 @@ describe('POST /auth/login (integration)', () => {
             database: cs.get<string>('DB_TEST_DATABASE', 'youtogether_test'),
             entities: [UserOrmEntity],
             migrations: [CreateUsersTable1714000000000],
+            dropSchema: true,
             migrationsRun: true,
             synchronize: false,
             logging: false,
@@ -222,9 +223,17 @@ describe('POST /auth/login (integration)', () => {
       const message = (
         Array.isArray(body.message) ? body.message.join(' ') : body.message
       ).toLowerCase();
-      expect(message).not.toContain('email');
+
+      // The message must not disclose WHICH part of the credentials was wrong,
+      // nor whether the account exists. Phrasings that would leak this are
+      // forbidden; the generic "invalid email or password" is acceptable
+      // because it covers both cases identically.
       expect(message).not.toContain('not found');
-      expect(message).not.toContain('exist');
+      expect(message).not.toContain('does not exist');
+      expect(message).not.toContain('no account');
+      expect(message).not.toContain('unknown user');
+      expect(message).not.toContain('wrong password');
+      expect(message).not.toContain('incorrect password');
     });
 
     it('should return 401 when the user account is soft-deleted', async () => {

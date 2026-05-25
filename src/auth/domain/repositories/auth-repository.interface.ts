@@ -1,4 +1,5 @@
 import { RegisterParams } from '../usecases/register.params';
+import { LoginParams } from '../usecases/login.params';
 import { AuthResult } from '../value-objects/auth-result.vo';
 
 /**
