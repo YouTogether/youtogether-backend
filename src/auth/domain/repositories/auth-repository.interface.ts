@@ -1,5 +1,5 @@
 import { RegisterParams } from '../usecases/register.params';
-import { RegisterResult } from '../value-objects/register-result.vo';
+import { AuthResult } from '../value-objects/auth-result.vo';
 
 /**
  * Repository port for the Authentication bounded context.
@@ -22,9 +22,26 @@ export abstract class IAuthRepository {
    * persists the record, and issues a token pair immediately.
    *
    * @param params - Registration input (email, password, username).
-   * @returns {@link RegisterResult} containing the new user and token pair.
+   * @returns {@link AuthResult} containing the new user and token pair.
    * @throws {@link EmailAlreadyInUseFailure} if the email is already registered
    *   by an active (non-deleted) user.
    */
-  abstract register(params: RegisterParams): Promise<RegisterResult>;
+  abstract register(params: RegisterParams): Promise<AuthResult>;
+
+  /**
+   * Authenticates a user with email and password.
+   *
+   * Looks up the user by email among active (non-deleted) users, compares
+   * the plaintext password against the stored bcrypt hash, issues a new
+   * token pair on success, and stores the refresh token hash.
+   *
+   * The error message on failure is intentionally generic to prevent user
+   * enumeration (OWASP A07:2021).
+   *
+   * @param params - Login input (email, password).
+   * @returns {@link AuthResult} containing the authenticated user and a fresh token pair.
+   * @throws {@link InvalidCredentialsFailure} when the email is not found
+   *   or the password does not match. The same failure is used in both cases.
+   */
+  abstract login(params: LoginParams): Promise<AuthResult>;
 }
