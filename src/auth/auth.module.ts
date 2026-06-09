@@ -10,6 +10,7 @@ import { TokenService } from './data/services/token.service';
 import { UserOrmEntity } from './data/entities/user.orm-entity';
 import { IAuthRepository } from './domain/repositories/auth-repository.interface';
 import { RegisterUseCase } from './domain/usecases/register.usecase';
+import { LoginUseCase } from './domain/usecases/login.usecase';
 import { AuthController } from './presentation/controllers/auth.controller';
 import { JwtAuthGuard } from './presentation/guards/jwt-auth.guard';
 import { JwtStrategy } from './presentation/strategies/jwt.strategy';
@@ -58,6 +59,7 @@ import { JwtStrategy } from './presentation/strategies/jwt.strategy';
   controllers: [AuthController],
   providers: [
     RegisterUseCase,
+    LoginUseCase,
     TokenService,
     JwtStrategy,
     JwtAuthGuard,

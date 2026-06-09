@@ -17,13 +17,17 @@ export class CreateUsersTable1714000000000 implements MigrationInterface {
   name = 'CreateUsersTable1714000000000';
 
   public async up(queryRunner: QueryRunner): Promise<void> {
-    // Create the user_role enum type
+    // Create the enum type. The exception handler makes this safe against
+    // a time-of-check/time-of-use race: if a concurrent migration created
+    // the type between the implicit check and CREATE, `duplicate_object` is
+    // swallowed rather than aborting the migration. This matters when
+    // multiple integration suites run `migrationsRun` against one database.
     await queryRunner.query(`
       DO $$
       BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role') THEN
-          CREATE TYPE "user_role" AS ENUM ('registered', 'guest');
-        END IF;
+        CREATE TYPE "user_role" AS ENUM ('registered', 'guest');
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
       END
       $$;
     `);

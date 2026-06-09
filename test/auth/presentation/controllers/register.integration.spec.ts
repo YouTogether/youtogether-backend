@@ -14,6 +14,7 @@ import { UserOrmEntity } from '../../../../src/auth/data/entities/user.orm-entit
 import { IAuthRepository } from '../../../../src/auth/domain/repositories/auth-repository.interface';
 import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 import { RegisterUseCase } from '../../../../src/auth/domain/usecases/register.usecase';
+import { LoginUseCase } from '../../../../src/auth/domain/usecases/login.usecase';
 import { AuthController } from '../../../../src/auth/presentation/controllers/auth.controller';
 import { DomainExceptionFilter } from '../../../../src/auth/presentation/filters/domain-exception.filter';
 import { CreateUsersTable1714000000000 } from '../../../../src/database/migrations/1714000000000-CreateUsersTable';
@@ -141,6 +142,7 @@ describe('POST /auth/register (integration)', () => {
       controllers: [AuthController],
       providers: [
         RegisterUseCase,
+        LoginUseCase,
         TokenService,
         { provide: IAuthRepository, useClass: AuthRepositoryImpl },
       ],

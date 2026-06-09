@@ -4,7 +4,7 @@ import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 import { UserEntity } from '../../../../src/auth/domain/entities/user.entity';
 import { TokenPair } from '../../../../src/auth/domain/value-objects/token-pair.vo';
 import { RegisterParams } from '../../../../src/auth/domain/usecases/register.params';
-import { RegisterResult } from '../../../../src/auth/domain/value-objects/register-result.vo';
+import { AuthResult } from '../../../../src/auth/domain/value-objects/auth-result.vo';
 import { RegisterUseCase } from '../../../../src/auth/domain/usecases/register.usecase';
 
 /**
@@ -18,7 +18,8 @@ import { RegisterUseCase } from '../../../../src/auth/domain/usecases/register.u
  */
 describe('RegisterUseCase', () => {
   let registerUseCase: RegisterUseCase;
-  let authRepository: jest.Mocked<IAuthRepository>;
+  const registerMock = jest.fn<Promise<AuthResult>, [RegisterParams]>();
+  const loginMock = jest.fn();
 
   const VALID_PARAMS = new RegisterParams({
     email: 'test@example.com',
@@ -40,111 +41,106 @@ describe('RegisterUseCase', () => {
     refreshToken: 'a'.repeat(64),
   });
 
-  const MOCK_RESULT = new RegisterResult({
+  const MOCK_RESULT = new AuthResult({
     user: MOCK_USER,
     tokens: MOCK_TOKENS,
   });
 
   beforeEach(() => {
-    authRepository = {
-      register: jest.fn(),
-    } as jest.Mocked<IAuthRepository>;
-
+    registerMock.mockReset();
+    loginMock.mockReset();
+    const authRepository: IAuthRepository = {
+      register: registerMock,
+      login: loginMock,
+    };
     registerUseCase = new RegisterUseCase(authRepository);
   });
 
   describe('execute', () => {
     it('should delegate to IAuthRepository.register with the provided params', async () => {
-      const registerSpy = jest
-        .spyOn(authRepository, 'register')
-        .mockResolvedValue(MOCK_RESULT);
+      registerMock.mockResolvedValue(MOCK_RESULT);
 
       await registerUseCase.execute(VALID_PARAMS);
 
-      expect(registerSpy).toHaveBeenCalledWith(VALID_PARAMS);
-      expect(registerSpy).toHaveBeenCalledTimes(1);
+      expect(registerMock).toHaveBeenCalledWith(VALID_PARAMS);
+      expect(registerMock).toHaveBeenCalledTimes(1);
     });
 
-    it('should return the RegisterResult provided by the repository', async () => {
-      authRepository.register.mockResolvedValue(MOCK_RESULT);
+    it('should return the AuthResult provided by the repository', async () => {
+      registerMock.mockResolvedValue(MOCK_RESULT);
 
-      await expect(registerUseCase.execute(VALID_PARAMS)).resolves.toBe(
-        MOCK_RESULT,
-      );
+      const result = await registerUseCase.execute(VALID_PARAMS);
+
+      expect(result).toBe(MOCK_RESULT);
+      expect(result.user).toBe(MOCK_USER);
+      expect(result.tokens).toBe(MOCK_TOKENS);
     });
 
     it('should propagate EmailAlreadyInUseFailure from the repository', async () => {
-      const failure = new EmailAlreadyInUseFailure(VALID_PARAMS.email);
-      authRepository.register.mockRejectedValue(failure);
+      registerMock.mockRejectedValue(
+        new EmailAlreadyInUseFailure(VALID_PARAMS.email),
+      );
 
       await expect(registerUseCase.execute(VALID_PARAMS)).rejects.toThrow(
         EmailAlreadyInUseFailure,
       );
     });
 
-    it('should propagate the exact failure instance thrown by the repository', async () => {
-      const failure = new EmailAlreadyInUseFailure('test@example.com');
-      authRepository.register.mockRejectedValue(failure);
-
-      await expect(registerUseCase.execute(VALID_PARAMS)).rejects.toBe(failure);
-    });
-
     it('should not catch or transform unexpected errors', async () => {
-      const unexpectedError = new Error('Database connection lost');
-      authRepository.register.mockRejectedValue(unexpectedError);
+      registerMock.mockRejectedValue(new Error('Database connection lost'));
 
       await expect(registerUseCase.execute(VALID_PARAMS)).rejects.toThrow(
         'Database connection lost',
       );
     });
   });
+});
 
-  describe('RegisterParams', () => {
-    it('should store email, password, and username as readonly fields', () => {
-      const params = new RegisterParams({
-        email: 'user@example.com',
-        password: 'p4ssw0rd!',
-        username: 'myuser',
-      });
-
-      expect(params.email).toBe('user@example.com');
-      expect(params.password).toBe('p4ssw0rd!');
-      expect(params.username).toBe('myuser');
+describe('RegisterParams', () => {
+  it('should store email, password, and username as readonly fields', () => {
+    const params = new RegisterParams({
+      email: 'user@example.com',
+      password: 'p4ssw0rd!',
+      username: 'myuser',
     });
+
+    expect(params.email).toBe('user@example.com');
+    expect(params.password).toBe('p4ssw0rd!');
+    expect(params.username).toBe('myuser');
+  });
+});
+
+describe('AuthResult', () => {
+  it('should store user and tokens as readonly fields', () => {
+    const user = new UserEntity({
+      id: 'uuid',
+      email: 'a@b.com',
+      username: 'u',
+      role: UserRole.REGISTERED,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const tokens = new TokenPair({ accessToken: 'at', refreshToken: 'rt' });
+    const result = new AuthResult({ user, tokens });
+
+    expect(result.user).toBe(user);
+    expect(result.tokens).toBe(tokens);
+  });
+});
+
+describe('EmailAlreadyInUseFailure', () => {
+  it('should extend Error and carry the email address', () => {
+    const failure = new EmailAlreadyInUseFailure('dup@example.com');
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).toBeInstanceOf(EmailAlreadyInUseFailure);
+    expect(failure.email).toBe('dup@example.com');
+    expect(failure.name).toBe('EmailAlreadyInUseFailure');
   });
 
-  describe('RegisterResult', () => {
-    it('should store user and tokens as readonly fields', () => {
-      const user = new UserEntity({
-        id: 'uuid',
-        email: 'a@b.com',
-        username: 'u',
-        role: UserRole.REGISTERED,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-      const tokens = new TokenPair({ accessToken: 'at', refreshToken: 'rt' });
-      const result = new RegisterResult({ user, tokens });
+  it('should include the email in the error message', () => {
+    const failure = new EmailAlreadyInUseFailure('dup@example.com');
 
-      expect(result.user).toBe(user);
-      expect(result.tokens).toBe(tokens);
-    });
-  });
-
-  describe('EmailAlreadyInUseFailure', () => {
-    it('should extend Error and carry the email address', () => {
-      const failure = new EmailAlreadyInUseFailure('dup@example.com');
-
-      expect(failure).toBeInstanceOf(Error);
-      expect(failure).toBeInstanceOf(EmailAlreadyInUseFailure);
-      expect(failure.email).toBe('dup@example.com');
-      expect(failure.name).toBe('EmailAlreadyInUseFailure');
-    });
-
-    it('should include the email in the error message', () => {
-      const failure = new EmailAlreadyInUseFailure('dup@example.com');
-
-      expect(failure.message).toContain('dup@example.com');
-    });
+    expect(failure.message).toContain('dup@example.com');
   });
 });

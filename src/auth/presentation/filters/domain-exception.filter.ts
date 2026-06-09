@@ -3,36 +3,46 @@ import {
   Catch,
   ConflictException,
   ExceptionFilter,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Response } from 'express';
 
-import { EmailAlreadyInUseFailure } from '../../domain/failures/auth.failure';
+import {
+  EmailAlreadyInUseFailure,
+  InvalidCredentialsFailure,
+} from '../../domain/failures/auth.failure';
 
 /**
  * Exception filter that maps domain failures to appropriate HTTP responses.
  *
  * This filter is the sole crossing point between domain exceptions and HTTP
- * semantics. Domain classes never import HTTP status codes; instead, they
- * throw typed failures that this filter translates.
+ * semantics. Domain classes never import HTTP status codes.
  *
  * Mappings:
- * - {@link EmailAlreadyInUseFailure} → 409 Conflict
+ * - {@link EmailAlreadyInUseFailure}  -> 409 Conflict
+ * - {@link InvalidCredentialsFailure} -> 401 Unauthorized
  *
- * Apply this filter at the controller or module level. Additional domain
- * failures are registered here as the bounded context grows.
+ * Apply this filter at the controller level via @UseFilters(DomainExceptionFilter).
+ * New domain failures are registered here as the bounded context grows.
  *
  * @see AuthController
  * @competency Separation of concerns; domain does not depend on HTTP
  */
-@Catch(EmailAlreadyInUseFailure)
+@Catch(EmailAlreadyInUseFailure, InvalidCredentialsFailure)
 export class DomainExceptionFilter implements ExceptionFilter {
-  catch(exception: EmailAlreadyInUseFailure, host: ArgumentsHost): void {
+  catch(
+    exception: EmailAlreadyInUseFailure | InvalidCredentialsFailure,
+    host: ArgumentsHost,
+  ): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
 
-    const httpException = new ConflictException(
-      `An active account already exists for the email address "${exception.email}".`,
-    );
+    const httpException =
+      exception instanceof EmailAlreadyInUseFailure
+        ? new ConflictException(
+            `An active account already exists for the email address "${exception.email}".`,
+          )
+        : new UnauthorizedException('Invalid email or password.');
 
     response
       .status(httpException.getStatus())

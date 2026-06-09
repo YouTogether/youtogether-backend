@@ -18,15 +18,10 @@ export class UserProfileDto {
  * HTTP response body for successful authentication operations
  * (POST /auth/register, POST /auth/login).
  *
- * Shape matches the frontend {@link IAuthRemoteDataSource} contract
- * which maps the response to
- * `UserModel` including embedded token fields.
- *
- * The refresh token is returned in the response body. Transport-level
- * security (HTTPS) is enforced at the infrastructure/deployment level.
+ * Shape aligns with the frontend IAuthRemoteDataSource.
  *
  * @see AuthController.register
- * @see IAuthRemoteDataSource.register
+ * @see AuthController.login
  */
 export class AuthResponseDto {
   constructor(
@@ -35,7 +30,7 @@ export class AuthResponseDto {
     public readonly refreshToken: string,
   ) {}
 
-  static fromRegisterResult(params: {
+  static fromAuthResult(params: {
     id: string;
     email: string;
     username: string;

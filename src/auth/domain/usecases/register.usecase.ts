@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 
 import { IAuthRepository } from '../repositories/auth-repository.interface';
 import { RegisterParams } from './register.params';
-import { RegisterResult } from '../value-objects/register-result.vo';
+import { AuthResult } from '../value-objects/auth-result.vo';
 
 /**
  * Use case for user registration.
@@ -18,7 +18,7 @@ import { RegisterResult } from '../value-objects/register-result.vo';
  *
  * @see IAuthRepository.register — the delegated port method
  * @see RegisterParams — the input value object
- * @see RegisterResult — the output value object
+ * @see AuthResult — the output value object
  * @competency — Evolvable code via dependency inversion
  */
 @Injectable()
@@ -29,10 +29,10 @@ export class RegisterUseCase {
    * Executes the registration use case.
    *
    * @param params - Validated registration parameters.
-   * @returns A {@link RegisterResult} with the created user and issued tokens.
+   * @returns A {@link AuthResult} with the created user and issued tokens.
    * @throws {@link EmailAlreadyInUseFailure} propagated from the repository.
    */
-  async execute(params: RegisterParams): Promise<RegisterResult> {
+  async execute(params: RegisterParams): Promise<AuthResult> {
     return this.authRepository.register(params);
   }
 }
