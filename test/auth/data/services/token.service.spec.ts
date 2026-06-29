@@ -132,7 +132,7 @@ describe('TokenService', () => {
       await tokenService.generateRefreshToken(MOCK_USER_ID);
 
       expect(signAsyncSpy).toHaveBeenCalledWith(
-        { sub: MOCK_USER_ID, type: 'refresh' },
+        expect.objectContaining({ sub: MOCK_USER_ID, type: 'refresh' }),
         { secret: REFRESH_SECRET, expiresIn: '7d' },
       );
     });

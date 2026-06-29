@@ -23,7 +23,9 @@ describe('JwtStrategy', () => {
   beforeEach(async () => {
     getOrThrowSpy = jest
       .fn()
-      .mockReturnValue('test-secret-min-32-chars-long!!!');
+      .mockReturnValue(
+        'e675b2f9affdf3609e857294d44289bf4550c658e214dfab162d9f227e087e507b099101d302aeb480003e94527048dd',
+      );
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [

@@ -16,6 +16,7 @@ import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 import { IAuthRepository } from '../../../../src/auth/domain/repositories/auth-repository.interface';
 import { RegisterUseCase } from '../../../../src/auth/domain/usecases/register.usecase';
 import { LoginUseCase } from '../../../../src/auth/domain/usecases/login.usecase';
+import { RefreshUseCase } from '../../../../src/auth/domain/usecases/refresh.usecase';
 import { AuthController } from '../../../../src/auth/presentation/controllers/auth.controller';
 import { DomainExceptionFilter } from '../../../../src/auth/presentation/filters/domain-exception.filter';
 import { JwtStrategy } from '../../../../src/auth/presentation/strategies/jwt.strategy';
@@ -102,7 +103,7 @@ describe('POST /auth/login (integration)', () => {
           useFactory: (cs: ConfigService) => ({
             secret: cs.get<string>(
               'JWT_SECRET',
-              'test-secret-min-32-chars-long!!',
+              'e675b2f9affdf3609e857294d44289bf4550c658e214dfab162d9f227e087e507b099101d302aeb480003e94527048dd',
             ),
             signOptions: { expiresIn: '15m' },
           }),
@@ -112,6 +113,7 @@ describe('POST /auth/login (integration)', () => {
       providers: [
         RegisterUseCase,
         LoginUseCase,
+        RefreshUseCase,
         TokenService,
         JwtStrategy,
         { provide: IAuthRepository, useClass: AuthRepositoryImpl },
@@ -156,7 +158,7 @@ describe('POST /auth/login (integration)', () => {
       expect(body.user.username).toBe(SEED_USERNAME);
       expect(body.user.role).toBe('registered');
       expect(body.accessToken).toBeDefined();
-      expect(body.refreshToken).toMatch(/^[0-9a-f]{64}$/);
+      expect(body.refreshToken.split('.')).toHaveLength(3);
     });
 
     it('should return a valid three-part JWT access token', async () => {
