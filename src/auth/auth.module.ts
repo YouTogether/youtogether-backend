@@ -11,6 +11,7 @@ import { UserOrmEntity } from './data/entities/user.orm-entity';
 import { IAuthRepository } from './domain/repositories/auth-repository.interface';
 import { RegisterUseCase } from './domain/usecases/register.usecase';
 import { LoginUseCase } from './domain/usecases/login.usecase';
+import { RefreshUseCase } from './domain/usecases/refresh.usecase';
 import { AuthController } from './presentation/controllers/auth.controller';
 import { JwtAuthGuard } from './presentation/guards/jwt-auth.guard';
 import { JwtStrategy } from './presentation/strategies/jwt.strategy';
@@ -18,25 +19,18 @@ import { JwtStrategy } from './presentation/strategies/jwt.strategy';
 /**
  * NestJS module for the Authentication bounded context.
  *
- * Wires together all layers of the Clean Architecture:
- * - Domain layer: {@link RegisterUseCase} and {@link IAuthRepository} (port).
- * - Data layer: {@link AuthRepositoryImpl}, {@link TokenService}.
- * - Presentation layer: {@link AuthController}, {@link JwtStrategy},
- *   {@link JwtAuthGuard}.
+ * Use cases registered: {@link RegisterUseCase}, {@link LoginUseCase},
+ * {@link RefreshUseCase}. All delegate to {@link IAuthRepository} bound to
+ * {@link AuthRepositoryImpl}.
  *
- * The {@link IAuthRepository} abstract class is bound to {@link AuthRepositoryImpl}
- * via the `useClass` provider, implementing the dependency inversion principle.
+ * Required environment variables (see {@link TokenService}):
+ * - `JWT_SECRET` — access token signing secret.
+ * - `JWT_ACCESS_EXPIRATION` — access token TTL (default '15m').
+ * - `JWT_REFRESH_SECRET` — refresh token signing secret (REQUIRED; must differ from JWT_SECRET).
+ * - `JWT_REFRESH_EXPIRATION` — refresh token TTL (default '7d').
  *
- * {@link PassportModule} registers the default strategy as `'jwt'`. The
- * {@link JwtStrategy} and {@link JwtAuthGuard} are exported so that other
- * modules (room, video) can protect their own routes without redefining
- * authentication logic.
- *
- * JWT configuration is deferred to {@link JwtModule.registerAsync} to read
- * secrets from environment variables via {@link ConfigService}.
- *
- * @see JwtStrategy
- * @see JwtAuthGuard
+ * {@link JwtAuthGuard} and {@link PassportModule} are exported for reuse
+ * in room and video modules.
  */
 @Module({
   imports: [
@@ -60,6 +54,7 @@ import { JwtStrategy } from './presentation/strategies/jwt.strategy';
   providers: [
     RegisterUseCase,
     LoginUseCase,
+    RefreshUseCase,
     TokenService,
     JwtStrategy,
     JwtAuthGuard,

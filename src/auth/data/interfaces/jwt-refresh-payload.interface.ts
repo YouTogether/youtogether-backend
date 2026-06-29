@@ -17,4 +17,8 @@ export interface JwtRefreshPayload {
 
   /** Discriminator preventing access/refresh token confusion. */
   type: 'refresh';
+
+  /** Unique token identifier ensuring each issued token is distinct, even
+   *  when generated within the same second for the same user. */
+  jti?: string;
 }

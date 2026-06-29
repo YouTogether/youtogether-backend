@@ -6,10 +6,12 @@ import { IsNull, Repository } from 'typeorm';
 import {
   EmailAlreadyInUseFailure,
   InvalidCredentialsFailure,
+  InvalidRefreshTokenFailure,
 } from '../../domain/failures/auth.failure';
 import { IAuthRepository } from '../../domain/repositories/auth-repository.interface';
 import { AuthResult } from '../../domain/value-objects/auth-result.vo';
 import { LoginParams } from '../../domain/usecases/login.params';
+import { RefreshParams } from '../../domain/usecases/refresh.params';
 import { RegisterParams } from '../../domain/usecases/register.params';
 import { UserOrmEntity } from '../entities/user.orm-entity';
 import { UserMapper } from '../mappers/user.mapper';
@@ -35,8 +37,25 @@ import { TokenService } from '../services/token.service';
  *   {@link InvalidCredentialsFailure} with an identical generic message,
  *   preventing information leakage (OWASP A07:2021).
  *
+ * Refresh security considerations:
+ * - The presented refresh token is first verified cryptographically
+ *   (signature + expiration) via {@link TokenService.verifyAndDecodeRefreshToken}.
+ *   Any failure at this stage (invalid signature, expired, wrong claim type)
+ *   throws {@link InvalidRefreshTokenFailure} without touching the database.
+ * - The decoded `sub` claim resolves the associated active user. If the user
+ *   is not found, or has no active refresh session (`refreshTokenHash` is
+ *   `null` — e.g. after logout), the same failure is thrown.
+ * - The presented token's hash is compared against the stored hash. A match
+ *   triggers rotation: a new token pair is issued and the stored hash is
+ *   overwritten, invalidating the just-used token for any further refresh.
+ * - A mismatch indicates the token was already rotated and is being
+ *   replayed (e.g. a stolen, previously-valid token). In that case, the
+ *   stored hash is cleared entirely — invalidating the *current* legitimate
+ *   session as well — forcing the user through a fresh login. This is a
+ *   deliberate, conservative response to suspected token theft.
+ *
  * @see IAuthRepository — the domain port being implemented
- * @see TokenService — token generation and hashing
+ * @see TokenService — token generation, verification, and hashing
  * @see UserMapper — ORM <-> domain entity conversion
  * @competency Secure credential validation, timing-safe comparison
  */
@@ -126,6 +145,48 @@ export class AuthRepositoryImpl implements IAuthRepository {
 
     if (ormUser === null || !isPasswordValid) {
       throw new InvalidCredentialsFailure();
+    }
+
+    return this.buildAuthResult(ormUser);
+  }
+
+  // --- refresh ---
+
+  /**
+   * Rotates a session using a previously issued refresh token.
+   *
+   * @param params - The presented refresh token.
+   * @returns {@link AuthResult} with the user and a freshly rotated token pair.
+   * @throws {@link InvalidRefreshTokenFailure} on any validation failure.
+   */
+  async refresh(params: RefreshParams): Promise<AuthResult> {
+    let userId: string;
+    try {
+      const payload = this.tokenService.verifyAndDecodeRefreshToken(
+        params.refreshToken,
+      );
+      userId = payload.sub;
+    } catch {
+      throw new InvalidRefreshTokenFailure();
+    }
+
+    const ormUser = await this.userRepository.findOne({
+      where: { id: userId, deletedAt: IsNull() },
+    });
+
+    if (ormUser === null || ormUser.refreshTokenHash === null) {
+      throw new InvalidRefreshTokenFailure();
+    }
+
+    const hashMatches = this.tokenService.verifyRefreshToken(
+      params.refreshToken,
+      ormUser.refreshTokenHash,
+    );
+
+    if (!hashMatches) {
+      // Replay of an already-rotated token: invalidate the entire session.
+      await this.userRepository.update(ormUser.id, { refreshTokenHash: null });
+      throw new InvalidRefreshTokenFailure();
     }
 
     return this.buildAuthResult(ormUser);

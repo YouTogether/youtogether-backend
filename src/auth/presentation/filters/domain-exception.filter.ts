@@ -10,6 +10,7 @@ import { Response } from 'express';
 import {
   EmailAlreadyInUseFailure,
   InvalidCredentialsFailure,
+  InvalidRefreshTokenFailure,
 } from '../../domain/failures/auth.failure';
 
 /**
@@ -19,8 +20,9 @@ import {
  * semantics. Domain classes never import HTTP status codes.
  *
  * Mappings:
- * - {@link EmailAlreadyInUseFailure}  -> 409 Conflict
- * - {@link InvalidCredentialsFailure} -> 401 Unauthorized
+ * - {@link EmailAlreadyInUseFailure}   -> 409 Conflict
+ * - {@link InvalidCredentialsFailure}  -> 401 Unauthorized
+ * - {@link InvalidRefreshTokenFailure} -> 401 Unauthorized
  *
  * Apply this filter at the controller level via @UseFilters(DomainExceptionFilter).
  * New domain failures are registered here as the bounded context grows.
@@ -28,10 +30,17 @@ import {
  * @see AuthController
  * @competency Separation of concerns; domain does not depend on HTTP
  */
-@Catch(EmailAlreadyInUseFailure, InvalidCredentialsFailure)
+@Catch(
+  EmailAlreadyInUseFailure,
+  InvalidCredentialsFailure,
+  InvalidRefreshTokenFailure,
+)
 export class DomainExceptionFilter implements ExceptionFilter {
   catch(
-    exception: EmailAlreadyInUseFailure | InvalidCredentialsFailure,
+    exception:
+      | EmailAlreadyInUseFailure
+      | InvalidCredentialsFailure
+      | InvalidRefreshTokenFailure,
     host: ArgumentsHost,
   ): void {
     const ctx = host.switchToHttp();
@@ -42,7 +51,7 @@ export class DomainExceptionFilter implements ExceptionFilter {
         ? new ConflictException(
             `An active account already exists for the email address "${exception.email}".`,
           )
-        : new UnauthorizedException('Invalid email or password.');
+        : new UnauthorizedException(exception.message);
 
     response
       .status(httpException.getStatus())

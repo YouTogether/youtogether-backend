@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { createHash } from 'crypto';
+import { createHash, randomUUID } from 'crypto';
 import { StringValue } from 'ms';
 
 import { UserRole } from '../../domain/enums/user-role.enum';
@@ -87,7 +87,11 @@ export class TokenService {
    * @returns Signed refresh token JWT string.
    */
   async generateRefreshToken(userId: string): Promise<string> {
-    const payload: JwtRefreshPayload = { sub: userId, type: 'refresh' };
+    const payload: JwtRefreshPayload = {
+      sub: userId,
+      type: 'refresh',
+      jti: randomUUID(),
+    };
     const secret = this.configService.getOrThrow<string>('JWT_REFRESH_SECRET');
     const expiresIn = this.configService.get<string>(
       'JWT_REFRESH_EXPIRATION',
