@@ -16,6 +16,7 @@ import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 import { IAuthRepository } from '../../../../src/auth/domain/repositories/auth-repository.interface';
 import { RegisterUseCase } from '../../../../src/auth/domain/usecases/register.usecase';
 import { LoginUseCase } from '../../../../src/auth/domain/usecases/login.usecase';
+import { LogoutUseCase } from '../../../../src/auth/domain/usecases/logout.usecase';
 import { RefreshUseCase } from '../../../../src/auth/domain/usecases/refresh.usecase';
 import { AuthController } from '../../../../src/auth/presentation/controllers/auth.controller';
 import { DomainExceptionFilter } from '../../../../src/auth/presentation/filters/domain-exception.filter';
@@ -89,7 +90,8 @@ describe('POST /auth/login (integration)', () => {
             database: cs.get<string>('DB_TEST_DATABASE', 'youtogether_test'),
             entities: [UserOrmEntity],
             migrations: [CreateUsersTable1714000000000],
-            dropSchema: true,
+            // No dropSchema: see register.integration.spec.ts for the
+            // rationale (parallel-worker safety with idempotent migrations).
             migrationsRun: true,
             synchronize: false,
             logging: false,
@@ -113,6 +115,7 @@ describe('POST /auth/login (integration)', () => {
       providers: [
         RegisterUseCase,
         LoginUseCase,
+        LogoutUseCase,
         RefreshUseCase,
         TokenService,
         JwtStrategy,

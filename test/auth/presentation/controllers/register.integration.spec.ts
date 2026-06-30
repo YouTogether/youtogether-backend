@@ -15,6 +15,7 @@ import { IAuthRepository } from '../../../../src/auth/domain/repositories/auth-r
 import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 import { RegisterUseCase } from '../../../../src/auth/domain/usecases/register.usecase';
 import { LoginUseCase } from '../../../../src/auth/domain/usecases/login.usecase';
+import { LogoutUseCase } from '../../../../src/auth/domain/usecases/logout.usecase';
 import { RefreshUseCase } from '../../../../src/auth/domain/usecases/refresh.usecase';
 import { AuthController } from '../../../../src/auth/presentation/controllers/auth.controller';
 import { DomainExceptionFilter } from '../../../../src/auth/presentation/filters/domain-exception.filter';
@@ -117,10 +118,14 @@ describe('POST /auth/register (integration)', () => {
               ...connection,
               entities: [UserOrmEntity],
               migrations: [CreateUsersTable1714000000000],
-              // Drop the entire schema before connecting, then run migrations
-              // from scratch. Guarantees a deterministic state for every test
-              // run regardless of what previous test suites left behind.
-              dropSchema: true,
+              // No dropSchema here: this file may run concurrently with the
+              // other *.integration.spec.ts files against the same physical
+              // test database. Dropping the schema in one file's beforeAll
+              // would destroy tables mid-query in another file's running
+              // tests. The migration is idempotent (CREATE TABLE IF NOT
+              // EXISTS), so migrationsRun alone is sufficient and safe under
+              // arbitrary parallelism. Each file cleans up only its own rows
+              // (see afterEach), scoped by a distinct email suffix.
               migrationsRun: true,
               synchronize: false,
               // Surface database errors in test output so 500 responses are
@@ -146,6 +151,7 @@ describe('POST /auth/register (integration)', () => {
       providers: [
         RegisterUseCase,
         LoginUseCase,
+        LogoutUseCase,
         RefreshUseCase,
         TokenService,
         { provide: IAuthRepository, useClass: AuthRepositoryImpl },

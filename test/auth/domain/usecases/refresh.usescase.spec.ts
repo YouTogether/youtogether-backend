@@ -41,6 +41,7 @@ describe('RefreshUseCase', () => {
       register: jest.fn(),
       login: jest.fn(),
       refresh: jest.fn(),
+      logout: jest.fn(),
     } as jest.Mocked<IAuthRepository>;
 
     refreshUseCase = new RefreshUseCase(authRepository);
