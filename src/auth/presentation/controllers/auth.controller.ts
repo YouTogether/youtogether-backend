@@ -5,10 +5,13 @@ import {
   HttpStatus,
   Post,
   UseFilters,
+  UseGuards,
 } from '@nestjs/common';
 
 import { LoginUseCase } from '../../domain/usecases/login.usecase';
 import { LoginParams } from '../../domain/usecases/login.params';
+import { LogoutUseCase } from '../../domain/usecases/logout.usecase';
+import { LogoutParams } from '../../domain/usecases/logout.params';
 import { RefreshUseCase } from '../../domain/usecases/refresh.usecase';
 import { RefreshParams } from '../../domain/usecases/refresh.params';
 import { RegisterUseCase } from '../../domain/usecases/register.usecase';
@@ -18,7 +21,10 @@ import { AuthResponseDto } from '../dtos/auth-response.dto';
 import { LoginDto } from '../dtos/login.dto';
 import { RefreshTokenDto } from '../dtos/refresh-token.dto';
 import { RegisterDto } from '../dtos/register.dto';
+import { CurrentUser } from '../decorators/current-user.decorator';
 import { DomainExceptionFilter } from '../filters/domain-exception.filter';
+import { JwtAuthGuard } from '../guards/jwt-auth.guard';
+import { AuthenticatedUser } from '../interfaces/authenticated-user.interface';
 
 /**
  * Controller for the Authentication bounded context.
@@ -34,10 +40,12 @@ import { DomainExceptionFilter } from '../filters/domain-exception.filter';
  * - POST /auth/register -> {@link RegisterUseCase}
  * - POST /auth/login    -> {@link LoginUseCase}
  * - POST /auth/refresh  -> {@link RefreshUseCase}
+ * - POST /auth/logout   -> {@link LogoutUseCase} (protected by {@link JwtAuthGuard})
  *
  * @see RegisterUseCase
  * @see LoginUseCase
  * @see RefreshUseCase
+ * @see LogoutUseCase
  * @see DomainExceptionFilter
  */
 @Controller('auth')
@@ -47,6 +55,7 @@ export class AuthController {
     private readonly registerUseCase: RegisterUseCase,
     private readonly loginUseCase: LoginUseCase,
     private readonly refreshUseCase: RefreshUseCase,
+    private readonly logoutUseCase: LogoutUseCase,
   ) {}
 
   /**
@@ -119,8 +128,34 @@ export class AuthController {
   }
 
   /**
+   * POST /auth/logout
+   *
+   * Terminates the current session server-side by clearing the stored
+   * refresh token hash for the authenticated user. The presented access
+   * token is not itself revoked (see {@link IAuthRepository.logout}), but
+   * any subsequent refresh attempt using the now-orphaned refresh token
+   * fails with 401.
+   *
+   * Requires a valid, non-expired access token via {@link JwtAuthGuard}.
+   * The user id is taken exclusively from the validated token (via
+   * {@link CurrentUser}) — never from client-supplied input — so a user
+   * can only ever terminate their own session.
+   *
+   * HTTP status codes:
+   * - 200 OK           — session terminated (or was already inactive).
+   * - 401 Unauthorized — missing, invalid, or expired access token.
+   */
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async logout(@CurrentUser() user: AuthenticatedUser): Promise<void> {
+    await this.logoutUseCase.execute(new LogoutParams({ userId: user.userId }));
+  }
+
+  /**
    * Shapes the shared {@link AuthResponseDto} from an {@link AuthResult}.
-   * Used by all three routes to avoid duplicating the mapping logic.
+   * Used by register, login, and refresh to avoid duplicating the mapping
+   * logic. logout() has no AuthResult to map — it returns void.
    */
   private toResponse(result: AuthResult): AuthResponseDto {
     return AuthResponseDto.fromAuthResult({

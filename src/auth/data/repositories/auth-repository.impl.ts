@@ -11,6 +11,7 @@ import {
 import { IAuthRepository } from '../../domain/repositories/auth-repository.interface';
 import { AuthResult } from '../../domain/value-objects/auth-result.vo';
 import { LoginParams } from '../../domain/usecases/login.params';
+import { LogoutParams } from '../../domain/usecases/logout.params';
 import { RefreshParams } from '../../domain/usecases/refresh.params';
 import { RegisterParams } from '../../domain/usecases/register.params';
 import { UserOrmEntity } from '../entities/user.orm-entity';
@@ -53,6 +54,9 @@ import { TokenService } from '../services/token.service';
  *   stored hash is cleared entirely — invalidating the *current* legitimate
  *   session as well — forcing the user through a fresh login. This is a
  *   deliberate, conservative response to suspected token theft.
+ *
+ * Logout: simply clears the stored refresh token hash for the authenticated
+ * user. See {@link IAuthRepository.logout} for the full rationale.
  *
  * @see IAuthRepository — the domain port being implemented
  * @see TokenService — token generation, verification, and hashing
@@ -190,6 +194,27 @@ export class AuthRepositoryImpl implements IAuthRepository {
     }
 
     return this.buildAuthResult(ormUser);
+  }
+
+  // --- logout ---
+
+  /**
+   * Clears the stored refresh token hash for the given user, invalidating
+   * their refresh session server-side.
+   *
+   * No existence check is performed before the update: the caller's id
+   * comes from a cryptographically validated access token (via
+   * {@link JwtAuthGuard}), and the operation is naturally idempotent —
+   * updating a row that no longer matches (already cleared, or the user
+   * was deleted between token issuance and this call) simply affects zero
+   * rows without error.
+   *
+   * @param params - The id of the currently authenticated user.
+   */
+  async logout(params: LogoutParams): Promise<void> {
+    await this.userRepository.update(params.userId, {
+      refreshTokenHash: null,
+    });
   }
 
   // --- shared helpers ---
