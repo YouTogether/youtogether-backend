@@ -4,12 +4,15 @@ import { ConflictException, UnauthorizedException } from '@nestjs/common';
 import { AuthController } from '../../../../src/auth/presentation/controllers/auth.controller';
 import { RegisterUseCase } from '../../../../src/auth/domain/usecases/register.usecase';
 import { LoginUseCase } from '../../../../src/auth/domain/usecases/login.usecase';
+import { RefreshUseCase } from '../../../../src/auth/domain/usecases/refresh.usecase';
 import { RegisterDto } from '../../../../src/auth/presentation/dtos/register.dto';
 import { LoginDto } from '../../../../src/auth/presentation/dtos/login.dto';
+import { RefreshTokenDto } from '../../../../src/auth/presentation/dtos/refresh-token.dto';
 import { AuthResponseDto } from '../../../../src/auth/presentation/dtos/auth-response.dto';
 import {
   EmailAlreadyInUseFailure,
   InvalidCredentialsFailure,
+  InvalidRefreshTokenFailure,
 } from '../../../../src/auth/domain/failures/auth.failure';
 import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 import { UserEntity } from '../../../../src/auth/domain/entities/user.entity';
@@ -17,11 +20,12 @@ import { TokenPair } from '../../../../src/auth/domain/value-objects/token-pair.
 import { AuthResult } from '../../../../src/auth/domain/value-objects/auth-result.vo';
 import { RegisterParams } from '../../../../src/auth/domain/usecases/register.params';
 import { LoginParams } from '../../../../src/auth/domain/usecases/login.params';
+import { RefreshParams } from '../../../../src/auth/domain/usecases/refresh.params';
 
 /**
  * Unit tests for AuthController.
  *
- * Both use cases are mocked. Tests verify:
+ * All three use cases are mocked. Tests verify:
  *   - DTO is correctly mapped to the domain value object.
  *   - AuthResponseDto is correctly shaped from AuthResult.
  *   - Domain failures propagate as-is (DomainExceptionFilter handles HTTP mapping).
@@ -31,7 +35,7 @@ import { LoginParams } from '../../../../src/auth/domain/usecases/login.params';
  * avoids the unbound-method false positive (the consts are plain functions).
  *
  * @competency Unit test harness, TDD.
- * @competency Test scenarios: success and conflict paths.
+ * @competency Test scenarios: success, conflict, unauthorized paths.
  */
 describe('AuthController', () => {
   let authController: AuthController;
@@ -39,6 +43,8 @@ describe('AuthController', () => {
   const registerExecute: jest.MockedFunction<RegisterUseCase['execute']> =
     jest.fn();
   const loginExecute: jest.MockedFunction<LoginUseCase['execute']> = jest.fn();
+  const refreshExecute: jest.MockedFunction<RefreshUseCase['execute']> =
+    jest.fn();
 
   const MOCK_USER = new UserEntity({
     id: '550e8400-e29b-41d4-a716-446655440000',
@@ -56,15 +62,27 @@ describe('AuthController', () => {
 
   const MOCK_RESULT = new AuthResult({ user: MOCK_USER, tokens: MOCK_TOKENS });
 
+  const ROTATED_TOKENS = new TokenPair({
+    accessToken: 'rotated.access.token',
+    refreshToken: 'c'.repeat(64),
+  });
+
+  const ROTATED_RESULT = new AuthResult({
+    user: MOCK_USER,
+    tokens: ROTATED_TOKENS,
+  });
+
   beforeEach(async () => {
     registerExecute.mockReset();
     loginExecute.mockReset();
+    refreshExecute.mockReset();
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
       providers: [
         { provide: RegisterUseCase, useValue: { execute: registerExecute } },
         { provide: LoginUseCase, useValue: { execute: loginExecute } },
+        { provide: RefreshUseCase, useValue: { execute: refreshExecute } },
       ],
     }).compile();
 
@@ -230,6 +248,81 @@ describe('AuthController', () => {
     });
   });
 
+  // --- POST /auth/refresh ---
+
+  describe('refresh()', () => {
+    const VALID_REFRESH_DTO: RefreshTokenDto = Object.assign(
+      new RefreshTokenDto(),
+      { refreshToken: MOCK_TOKENS.refreshToken },
+    );
+
+    it('should return an AuthResponseDto on success', async () => {
+      refreshExecute.mockResolvedValue(ROTATED_RESULT);
+
+      const response = await authController.refresh(VALID_REFRESH_DTO);
+
+      expect(response).toBeInstanceOf(AuthResponseDto);
+    });
+
+    it('should call RefreshUseCase.execute with RefreshParams built from the DTO', async () => {
+      refreshExecute.mockResolvedValue(ROTATED_RESULT);
+
+      await authController.refresh(VALID_REFRESH_DTO);
+
+      expect(refreshExecute).toHaveBeenCalledWith(
+        expect.objectContaining<Partial<RefreshParams>>({
+          refreshToken: VALID_REFRESH_DTO.refreshToken,
+        }),
+      );
+    });
+
+    it('should return the rotated token pair, not the presented one', async () => {
+      refreshExecute.mockResolvedValue(ROTATED_RESULT);
+
+      const response = await authController.refresh(VALID_REFRESH_DTO);
+
+      expect(response.accessToken).toBe(ROTATED_TOKENS.accessToken);
+      expect(response.refreshToken).toBe(ROTATED_TOKENS.refreshToken);
+      expect(response.refreshToken).not.toBe(VALID_REFRESH_DTO.refreshToken);
+    });
+
+    it('should map user fields correctly in the response', async () => {
+      refreshExecute.mockResolvedValue(ROTATED_RESULT);
+
+      const response = await authController.refresh(VALID_REFRESH_DTO);
+
+      expect(response.user.id).toBe(MOCK_USER.id);
+      expect(response.user.email).toBe(MOCK_USER.email);
+      expect(response.user.role).toBe(UserRole.REGISTERED);
+    });
+
+    it('should not include passwordHash or refreshTokenHash in the response', async () => {
+      refreshExecute.mockResolvedValue(ROTATED_RESULT);
+
+      const response = await authController.refresh(VALID_REFRESH_DTO);
+      const userRecord = response.user as unknown as Record<string, unknown>;
+
+      expect(userRecord.passwordHash).toBeUndefined();
+      expect(userRecord.refreshTokenHash).toBeUndefined();
+    });
+
+    it('should propagate InvalidRefreshTokenFailure (filter maps it to 401)', async () => {
+      refreshExecute.mockRejectedValue(new InvalidRefreshTokenFailure());
+
+      await expect(authController.refresh(VALID_REFRESH_DTO)).rejects.toThrow(
+        InvalidRefreshTokenFailure,
+      );
+    });
+
+    it('should not swallow unexpected errors', async () => {
+      refreshExecute.mockRejectedValue(new Error('Database unavailable'));
+
+      await expect(authController.refresh(VALID_REFRESH_DTO)).rejects.toThrow(
+        'Database unavailable',
+      );
+    });
+  });
+
   // --- DomainExceptionFilter HTTP mappings (unit verification) ---
 
   describe('DomainExceptionFilter HTTP mappings', () => {
@@ -242,6 +335,13 @@ describe('AuthController', () => {
 
     it('should map InvalidCredentialsFailure to UnauthorizedException (401)', () => {
       const failure = new InvalidCredentialsFailure();
+      const httpException = new UnauthorizedException(failure.message);
+
+      expect(httpException.getStatus()).toBe(401);
+    });
+
+    it('should map InvalidRefreshTokenFailure to UnauthorizedException (401)', () => {
+      const failure = new InvalidRefreshTokenFailure();
       const httpException = new UnauthorizedException(failure.message);
 
       expect(httpException.getStatus()).toBe(401);

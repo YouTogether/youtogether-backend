@@ -40,3 +40,27 @@ export class InvalidCredentialsFailure extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
+
+/**
+ * Thrown by the auth repository when a refresh token is invalid, expired,
+ * or does not match the stored hash for the associated user.
+ *
+ * A single failure type covers all three cases (invalid signature, expired,
+ * hash mismatch / replay) so the HTTP response never reveals which specific
+ * condition triggered it. On a hash mismatch, the repository additionally
+ * clears the stored refresh token hash before throwing, invalidating the
+ * entire session and forcing the client through a fresh login.
+ *
+ * The presentation layer maps this failure to HTTP 401 Unauthorized.
+ *
+ * @see IAuthRepository.refresh
+ * @see DomainExceptionFilter
+ * @competency Replay detection (B-A03-T1)
+ */
+export class InvalidRefreshTokenFailure extends Error {
+  constructor() {
+    super('Invalid or expired refresh token.');
+    this.name = 'InvalidRefreshTokenFailure';
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}

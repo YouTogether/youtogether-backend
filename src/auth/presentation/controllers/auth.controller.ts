@@ -9,10 +9,14 @@ import {
 
 import { LoginUseCase } from '../../domain/usecases/login.usecase';
 import { LoginParams } from '../../domain/usecases/login.params';
+import { RefreshUseCase } from '../../domain/usecases/refresh.usecase';
+import { RefreshParams } from '../../domain/usecases/refresh.params';
 import { RegisterUseCase } from '../../domain/usecases/register.usecase';
 import { RegisterParams } from '../../domain/usecases/register.params';
+import { AuthResult } from '../../domain/value-objects/auth-result.vo';
 import { AuthResponseDto } from '../dtos/auth-response.dto';
 import { LoginDto } from '../dtos/login.dto';
+import { RefreshTokenDto } from '../dtos/refresh-token.dto';
 import { RegisterDto } from '../dtos/register.dto';
 import { DomainExceptionFilter } from '../filters/domain-exception.filter';
 
@@ -29,9 +33,11 @@ import { DomainExceptionFilter } from '../filters/domain-exception.filter';
  * Routes:
  * - POST /auth/register -> {@link RegisterUseCase}
  * - POST /auth/login    -> {@link LoginUseCase}
+ * - POST /auth/refresh  -> {@link RefreshUseCase}
  *
  * @see RegisterUseCase
  * @see LoginUseCase
+ * @see RefreshUseCase
  * @see DomainExceptionFilter
  */
 @Controller('auth')
@@ -40,6 +46,7 @@ export class AuthController {
   constructor(
     private readonly registerUseCase: RegisterUseCase,
     private readonly loginUseCase: LoginUseCase,
+    private readonly refreshUseCase: RefreshUseCase,
   ) {}
 
   /**
@@ -63,15 +70,7 @@ export class AuthController {
       }),
     );
 
-    return AuthResponseDto.fromAuthResult({
-      id: result.user.id,
-      email: result.user.email,
-      username: result.user.username,
-      role: result.user.role,
-      createdAt: result.user.createdAt,
-      accessToken: result.tokens.accessToken,
-      refreshToken: result.tokens.refreshToken,
-    });
+    return this.toResponse(result);
   }
 
   /**
@@ -94,6 +93,36 @@ export class AuthController {
       }),
     );
 
+    return this.toResponse(result);
+  }
+
+  /**
+   * POST /auth/refresh
+   *
+   * Rotates the session: validates the presented refresh token, issues a
+   * new access/refresh pair, and invalidates the presented token for any
+   * further use.
+   *
+   * HTTP status codes:
+   * - 200 OK           — rotation successful, new token pair returned.
+   * - 400 Bad Request  — malformed token (fails JWT structural validation).
+   * - 401 Unauthorized — invalid, expired, or already-used (replayed) token.
+   */
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  async refresh(@Body() dto: RefreshTokenDto): Promise<AuthResponseDto> {
+    const result = await this.refreshUseCase.execute(
+      new RefreshParams({ refreshToken: dto.refreshToken }),
+    );
+
+    return this.toResponse(result);
+  }
+
+  /**
+   * Shapes the shared {@link AuthResponseDto} from an {@link AuthResult}.
+   * Used by all three routes to avoid duplicating the mapping logic.
+   */
+  private toResponse(result: AuthResult): AuthResponseDto {
     return AuthResponseDto.fromAuthResult({
       id: result.user.id,
       email: result.user.email,

@@ -15,6 +15,7 @@ import { IAuthRepository } from '../../../../src/auth/domain/repositories/auth-r
 import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 import { RegisterUseCase } from '../../../../src/auth/domain/usecases/register.usecase';
 import { LoginUseCase } from '../../../../src/auth/domain/usecases/login.usecase';
+import { RefreshUseCase } from '../../../../src/auth/domain/usecases/refresh.usecase';
 import { AuthController } from '../../../../src/auth/presentation/controllers/auth.controller';
 import { DomainExceptionFilter } from '../../../../src/auth/presentation/filters/domain-exception.filter';
 import { CreateUsersTable1714000000000 } from '../../../../src/database/migrations/1714000000000-CreateUsersTable';
@@ -134,7 +135,9 @@ describe('POST /auth/register (integration)', () => {
             // Read directly from process.env with a test fallback, consistent
             // with the DATABASE_URL handling above. In CI the secret is injected
             // into the process environment; locally the fallback applies.
-            secret: process.env.JWT_SECRET ?? 'test-secret-min-32-chars-long!!',
+            secret:
+              process.env.JWT_SECRET ??
+              'e675b2f9affdf3609e857294d44289bf4550c658e214dfab162d9f227e087e507b099101d302aeb480003e94527048dd',
             signOptions: { expiresIn: '15m' },
           }),
         }),
@@ -143,6 +146,7 @@ describe('POST /auth/register (integration)', () => {
       providers: [
         RegisterUseCase,
         LoginUseCase,
+        RefreshUseCase,
         TokenService,
         { provide: IAuthRepository, useClass: AuthRepositoryImpl },
       ],
@@ -196,7 +200,7 @@ describe('POST /auth/register (integration)', () => {
         /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
       );
       expect(body.accessToken).toBeDefined();
-      expect(body.refreshToken).toMatch(/^[0-9a-f]{64}$/);
+      expect(body.refreshToken.split('.')).toHaveLength(3);
     });
 
     it('should not include passwordHash or refreshTokenHash in the response', async () => {

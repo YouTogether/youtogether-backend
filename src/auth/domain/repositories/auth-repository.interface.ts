@@ -1,4 +1,5 @@
 import { RegisterParams } from '../usecases/register.params';
+import { RefreshParams } from '../usecases/refresh.params';
 import { LoginParams } from '../usecases/login.params';
 import { AuthResult } from '../value-objects/auth-result.vo';
 
@@ -45,4 +46,23 @@ export abstract class IAuthRepository {
    *   or the password does not match. The same failure is used in both cases.
    */
   abstract login(params: LoginParams): Promise<AuthResult>;
+
+  /**
+   * Rotates a session using a previously issued refresh token.
+   *
+   * Validates the token's signature and expiration, resolves the associated
+   * user from its `sub` claim, and compares the token's hash against the
+   * stored `refresh_token_hash`. On a match, issues a new token pair
+   * (rotation) and overwrites the stored hash, invalidating the presented
+   * token for any future use. On a hash mismatch (replay of an
+   * already-rotated token), the stored hash is cleared entirely, forcing
+   * re-authentication for the whole session.
+   *
+   * @param params - The presented refresh token.
+   * @returns {@link AuthResult} containing the user and a freshly rotated token pair.
+   * @throws {@link InvalidRefreshTokenFailure} when the token is invalid,
+   *   expired, belongs to a deleted/unknown user, or does not match the
+   *   stored hash.
+   */
+  abstract refresh(params: RefreshParams): Promise<AuthResult>;
 }
