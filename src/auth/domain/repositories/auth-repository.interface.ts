@@ -1,6 +1,7 @@
 import { RegisterParams } from '../usecases/register.params';
 import { RefreshParams } from '../usecases/refresh.params';
 import { LoginParams } from '../usecases/login.params';
+import { LogoutParams } from '../usecases/logout.params';
 import { AuthResult } from '../value-objects/auth-result.vo';
 
 /**
@@ -65,4 +66,23 @@ export abstract class IAuthRepository {
    *   stored hash.
    */
   abstract refresh(params: RefreshParams): Promise<AuthResult>;
+
+  /**
+   * Terminates a user's session server-side by clearing the stored refresh
+   * token hash. This invalidates the refresh token immediately: any
+   * subsequent POST /auth/refresh using the now-orphaned token fails with
+   * {@link InvalidRefreshTokenFailure} (the user has no active session).
+   *
+   * The presented access token itself remains cryptographically valid until
+   * its own (short) expiration — logout cannot revoke an access token
+   * already issued, only prevent the session from being silently renewed.
+   * This is the standard, accepted trade-off for short-lived access tokens.
+   *
+   * Idempotent: calling logout for a user with no active session (already
+   * logged out) succeeds silently.
+   *
+   * @param params - The id of the currently authenticated user, resolved
+   *   from the validated access token by {@link JwtAuthGuard}.
+   */
+  abstract logout(params: LogoutParams): Promise<void>;
 }

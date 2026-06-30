@@ -65,9 +65,26 @@ describe('CreateUsersTable Migration (integration)', () => {
   });
 
   afterAll(async () => {
-    const migration = new CreateUsersTable1714000000000();
+    // Earlier tests in this file exercise migration.down() directly to
+    // verify reversibility; depending on execution order within the file,
+    // the table may or may not be present at this point. Other
+    // *.integration.spec.ts files share this same physical test database
+    // and rely on TypeORM's migrationsRun history table to decide whether
+    // to (re)create "users" — a history entry that this file never touches,
+    // since it drives the migration manually rather than through
+    // TypeOrmModule.forRootAsync({ migrationsRun: true }).
+    //
+    // If this afterAll dropped the table unconditionally, the migrations
+    // history table (populated by the controller integration specs) would
+    // still claim the migration had already run, and on every subsequent
+    // test invocation those specs would skip recreating "users" — silently
+    // leaving the shared database without the table. Restoring it here
+    // (idempotent: CREATE TABLE IF NOT EXISTS) guarantees this file always
+    // hands back a database in the state every other integration spec
+    // expects, regardless of which of this file's own tests ran last.
     const queryRunner: QueryRunner = dataSource.createQueryRunner();
-    await migration.down(queryRunner);
+    const migration = new CreateUsersTable1714000000000();
+    await migration.up(queryRunner);
     await queryRunner.release();
     await dataSource.destroy();
   });

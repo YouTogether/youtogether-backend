@@ -16,6 +16,7 @@ import { UserOrmEntity } from '../../../../src/auth/data/entities/user.orm-entit
 import { IAuthRepository } from '../../../../src/auth/domain/repositories/auth-repository.interface';
 import { RegisterUseCase } from '../../../../src/auth/domain/usecases/register.usecase';
 import { LoginUseCase } from '../../../../src/auth/domain/usecases/login.usecase';
+import { LogoutUseCase } from '../../../../src/auth/domain/usecases/logout.usecase';
 import { RefreshUseCase } from '../../../../src/auth/domain/usecases/refresh.usecase';
 import { AuthController } from '../../../../src/auth/presentation/controllers/auth.controller';
 import { DomainExceptionFilter } from '../../../../src/auth/presentation/filters/domain-exception.filter';
@@ -85,6 +86,7 @@ describe('POST /auth/refresh (integration)', () => {
       providers: [
         RegisterUseCase,
         LoginUseCase,
+        LogoutUseCase,
         RefreshUseCase,
         TokenService,
         JwtStrategy,

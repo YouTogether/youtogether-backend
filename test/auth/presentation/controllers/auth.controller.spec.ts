@@ -5,6 +5,7 @@ import { AuthController } from '../../../../src/auth/presentation/controllers/au
 import { RegisterUseCase } from '../../../../src/auth/domain/usecases/register.usecase';
 import { LoginUseCase } from '../../../../src/auth/domain/usecases/login.usecase';
 import { RefreshUseCase } from '../../../../src/auth/domain/usecases/refresh.usecase';
+import { LogoutUseCase } from '../../../../src/auth/domain/usecases/logout.usecase';
 import { RegisterDto } from '../../../../src/auth/presentation/dtos/register.dto';
 import { LoginDto } from '../../../../src/auth/presentation/dtos/login.dto';
 import { RefreshTokenDto } from '../../../../src/auth/presentation/dtos/refresh-token.dto';
@@ -21,18 +22,27 @@ import { AuthResult } from '../../../../src/auth/domain/value-objects/auth-resul
 import { RegisterParams } from '../../../../src/auth/domain/usecases/register.params';
 import { LoginParams } from '../../../../src/auth/domain/usecases/login.params';
 import { RefreshParams } from '../../../../src/auth/domain/usecases/refresh.params';
+import { LogoutParams } from '../../../../src/auth/domain/usecases/logout.params';
+import { AuthenticatedUser } from '../../../../src/auth/presentation/interfaces/authenticated-user.interface';
 
 /**
  * Unit tests for AuthController.
  *
- * All three use cases are mocked. Tests verify:
+ * All four use cases are mocked. Tests verify:
  *   - DTO is correctly mapped to the domain value object.
  *   - AuthResponseDto is correctly shaped from AuthResult.
  *   - Domain failures propagate as-is (DomainExceptionFilter handles HTTP mapping).
+ *   - logout() reads the userId exclusively from the validated
+ *     AuthenticatedUser injected via @CurrentUser (never from a request body).
  *
  * Mocks are typed via jest.MockedFunction against the use-case method
  * signatures, which resolves correctly under all @types/jest versions and
  * avoids the unbound-method false positive (the consts are plain functions).
+ *
+ * The JwtAuthGuard itself is NOT exercised here — this is a unit test that
+ * calls authController.logout() directly. Guard rejection (401 on
+ * missing/invalid token) is verified by logout.integration.spec.ts against
+ * a fully bootstrapped application.
  *
  * @competency Unit test harness, TDD.
  * @competency Test scenarios: success, conflict, unauthorized paths.
@@ -44,6 +54,8 @@ describe('AuthController', () => {
     jest.fn();
   const loginExecute: jest.MockedFunction<LoginUseCase['execute']> = jest.fn();
   const refreshExecute: jest.MockedFunction<RefreshUseCase['execute']> =
+    jest.fn();
+  const logoutExecute: jest.MockedFunction<LogoutUseCase['execute']> =
     jest.fn();
 
   const MOCK_USER = new UserEntity({
@@ -72,10 +84,16 @@ describe('AuthController', () => {
     tokens: ROTATED_TOKENS,
   });
 
+  const AUTHENTICATED_USER: AuthenticatedUser = {
+    userId: MOCK_USER.id,
+    role: UserRole.REGISTERED,
+  };
+
   beforeEach(async () => {
     registerExecute.mockReset();
     loginExecute.mockReset();
     refreshExecute.mockReset();
+    logoutExecute.mockReset();
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
@@ -83,6 +101,7 @@ describe('AuthController', () => {
         { provide: RegisterUseCase, useValue: { execute: registerExecute } },
         { provide: LoginUseCase, useValue: { execute: loginExecute } },
         { provide: RefreshUseCase, useValue: { execute: refreshExecute } },
+        { provide: LogoutUseCase, useValue: { execute: logoutExecute } },
       ],
     }).compile();
 
@@ -318,6 +337,55 @@ describe('AuthController', () => {
       refreshExecute.mockRejectedValue(new Error('Database unavailable'));
 
       await expect(authController.refresh(VALID_REFRESH_DTO)).rejects.toThrow(
+        'Database unavailable',
+      );
+    });
+  });
+
+  // --- POST /auth/logout ---
+
+  describe('logout()', () => {
+    it('should call LogoutUseCase.execute with LogoutParams built from the injected user', async () => {
+      logoutExecute.mockResolvedValue(undefined);
+
+      await authController.logout(AUTHENTICATED_USER);
+
+      expect(logoutExecute).toHaveBeenCalledWith(
+        expect.objectContaining<Partial<LogoutParams>>({
+          userId: AUTHENTICATED_USER.userId,
+        }),
+      );
+      expect(logoutExecute).toHaveBeenCalledTimes(1);
+    });
+
+    it('should resolve with no value on success', async () => {
+      logoutExecute.mockResolvedValue(undefined);
+
+      await expect(
+        authController.logout(AUTHENTICATED_USER),
+      ).resolves.toBeUndefined();
+    });
+
+    it('should never read userId from anything other than the injected AuthenticatedUser', async () => {
+      logoutExecute.mockResolvedValue(undefined);
+      const otherUser: AuthenticatedUser = {
+        userId: '00000000-0000-4000-8000-000000000000',
+        role: UserRole.GUEST,
+      };
+
+      await authController.logout(otherUser);
+
+      expect(logoutExecute).toHaveBeenCalledWith(
+        expect.objectContaining<Partial<LogoutParams>>({
+          userId: otherUser.userId,
+        }),
+      );
+    });
+
+    it('should not swallow unexpected errors', async () => {
+      logoutExecute.mockRejectedValue(new Error('Database unavailable'));
+
+      await expect(authController.logout(AUTHENTICATED_USER)).rejects.toThrow(
         'Database unavailable',
       );
     });

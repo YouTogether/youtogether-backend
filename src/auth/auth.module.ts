@@ -12,6 +12,7 @@ import { IAuthRepository } from './domain/repositories/auth-repository.interface
 import { RegisterUseCase } from './domain/usecases/register.usecase';
 import { LoginUseCase } from './domain/usecases/login.usecase';
 import { RefreshUseCase } from './domain/usecases/refresh.usecase';
+import { LogoutUseCase } from './domain/usecases/logout.usecase';
 import { AuthController } from './presentation/controllers/auth.controller';
 import { JwtAuthGuard } from './presentation/guards/jwt-auth.guard';
 import { JwtStrategy } from './presentation/strategies/jwt.strategy';
@@ -20,8 +21,8 @@ import { JwtStrategy } from './presentation/strategies/jwt.strategy';
  * NestJS module for the Authentication bounded context.
  *
  * Use cases registered: {@link RegisterUseCase}, {@link LoginUseCase},
- * {@link RefreshUseCase}. All delegate to {@link IAuthRepository} bound to
- * {@link AuthRepositoryImpl}.
+ * {@link RefreshUseCase}, {@link LogoutUseCase}. All delegate to
+ * {@link IAuthRepository} bound to {@link AuthRepositoryImpl}.
  *
  * Required environment variables (see {@link TokenService}):
  * - `JWT_SECRET` — access token signing secret.
@@ -30,7 +31,8 @@ import { JwtStrategy } from './presentation/strategies/jwt.strategy';
  * - `JWT_REFRESH_EXPIRATION` — refresh token TTL (default '7d').
  *
  * {@link JwtAuthGuard} and {@link PassportModule} are exported for reuse
- * in room and video modules.
+ * in room and video modules. POST /auth/logout is the first endpoint in
+ * this module to consume the guard internally.
  */
 @Module({
   imports: [
@@ -55,6 +57,7 @@ import { JwtStrategy } from './presentation/strategies/jwt.strategy';
     RegisterUseCase,
     LoginUseCase,
     RefreshUseCase,
+    LogoutUseCase,
     TokenService,
     JwtStrategy,
     JwtAuthGuard,
