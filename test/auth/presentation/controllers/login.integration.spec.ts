@@ -18,6 +18,7 @@ import { RegisterUseCase } from '../../../../src/auth/domain/usecases/register.u
 import { LoginUseCase } from '../../../../src/auth/domain/usecases/login.usecase';
 import { LogoutUseCase } from '../../../../src/auth/domain/usecases/logout.usecase';
 import { RefreshUseCase } from '../../../../src/auth/domain/usecases/refresh.usecase';
+import { GetCurrentUserUseCase } from '../../../../src/auth/domain/usecases/get-current-user.usecase';
 import { AuthController } from '../../../../src/auth/presentation/controllers/auth.controller';
 import { DomainExceptionFilter } from '../../../../src/auth/presentation/filters/domain-exception.filter';
 import { JwtStrategy } from '../../../../src/auth/presentation/strategies/jwt.strategy';
@@ -117,6 +118,7 @@ describe('POST /auth/login (integration)', () => {
         LoginUseCase,
         LogoutUseCase,
         RefreshUseCase,
+        GetCurrentUserUseCase,
         TokenService,
         JwtStrategy,
         { provide: IAuthRepository, useClass: AuthRepositoryImpl },

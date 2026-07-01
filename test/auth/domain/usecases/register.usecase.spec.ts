@@ -22,6 +22,7 @@ describe('RegisterUseCase', () => {
   const loginMock = jest.fn();
   const refreshMock = jest.fn();
   const logoutMock = jest.fn();
+  const getCurrentUserMock = jest.fn();
 
   const VALID_PARAMS = new RegisterParams({
     email: 'test@example.com',
@@ -53,11 +54,13 @@ describe('RegisterUseCase', () => {
     loginMock.mockReset();
     refreshMock.mockReset();
     logoutMock.mockReset();
+    getCurrentUserMock.mockReset();
     const authRepository: IAuthRepository = {
       register: registerMock,
       login: loginMock,
       refresh: refreshMock,
       logout: logoutMock,
+      getCurrentUser: getCurrentUserMock,
     };
     registerUseCase = new RegisterUseCase(authRepository);
   });

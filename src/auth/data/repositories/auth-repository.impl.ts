@@ -7,9 +7,12 @@ import {
   EmailAlreadyInUseFailure,
   InvalidCredentialsFailure,
   InvalidRefreshTokenFailure,
+  UserNotFoundFailure,
 } from '../../domain/failures/auth.failure';
 import { IAuthRepository } from '../../domain/repositories/auth-repository.interface';
 import { AuthResult } from '../../domain/value-objects/auth-result.vo';
+import { UserEntity } from '../../domain/entities/user.entity';
+import { GetCurrentUserParams } from '../../domain/usecases/get-current-user.params';
 import { LoginParams } from '../../domain/usecases/login.params';
 import { LogoutParams } from '../../domain/usecases/logout.params';
 import { RefreshParams } from '../../domain/usecases/refresh.params';
@@ -57,6 +60,11 @@ import { TokenService } from '../services/token.service';
  *
  * Logout: simply clears the stored refresh token hash for the authenticated
  * user. See {@link IAuthRepository.logout} for the full rationale.
+ *
+ * getCurrentUser: performs a fresh lookup by id among active users, so a
+ * client with a cryptographically valid but "orphaned" token (account
+ * soft-deleted after issuance) is caught here rather than being trusted
+ * blindly. See {@link IAuthRepository.getCurrentUser}.
  *
  * @see IAuthRepository — the domain port being implemented
  * @see TokenService — token generation, verification, and hashing
@@ -215,6 +223,32 @@ export class AuthRepositoryImpl implements IAuthRepository {
     await this.userRepository.update(params.userId, {
       refreshTokenHash: null,
     });
+  }
+
+  // --- getCurrentUser ---
+
+  /**
+   * Retrieves the profile of the currently authenticated user.
+   *
+   * Unlike logout(), an explicit existence check IS required here: the
+   * caller needs the full profile back, so silently returning nothing is
+   * not an option. A soft-deleted user (deletedAt not null) is treated
+   * identically to a fully unknown id — both throw {@link UserNotFoundFailure}.
+   *
+   * @param params - The id of the currently authenticated user.
+   * @returns The {@link UserEntity} for the active user.
+   * @throws {@link UserNotFoundFailure} when no active user matches the id.
+   */
+  async getCurrentUser(params: GetCurrentUserParams): Promise<UserEntity> {
+    const ormUser = await this.userRepository.findOne({
+      where: { id: params.userId, deletedAt: IsNull() },
+    });
+
+    if (ormUser === null) {
+      throw new UserNotFoundFailure();
+    }
+
+    return UserMapper.toDomain(ormUser);
   }
 
   // --- shared helpers ---

@@ -6,14 +6,19 @@ import { RegisterUseCase } from '../../../../src/auth/domain/usecases/register.u
 import { LoginUseCase } from '../../../../src/auth/domain/usecases/login.usecase';
 import { RefreshUseCase } from '../../../../src/auth/domain/usecases/refresh.usecase';
 import { LogoutUseCase } from '../../../../src/auth/domain/usecases/logout.usecase';
+import { GetCurrentUserUseCase } from '../../../../src/auth/domain/usecases/get-current-user.usecase';
 import { RegisterDto } from '../../../../src/auth/presentation/dtos/register.dto';
 import { LoginDto } from '../../../../src/auth/presentation/dtos/login.dto';
 import { RefreshTokenDto } from '../../../../src/auth/presentation/dtos/refresh-token.dto';
-import { AuthResponseDto } from '../../../../src/auth/presentation/dtos/auth-response.dto';
+import {
+  AuthResponseDto,
+  UserProfileDto,
+} from '../../../../src/auth/presentation/dtos/auth-response.dto';
 import {
   EmailAlreadyInUseFailure,
   InvalidCredentialsFailure,
   InvalidRefreshTokenFailure,
+  UserNotFoundFailure,
 } from '../../../../src/auth/domain/failures/auth.failure';
 import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 import { UserEntity } from '../../../../src/auth/domain/entities/user.entity';
@@ -23,16 +28,17 @@ import { RegisterParams } from '../../../../src/auth/domain/usecases/register.pa
 import { LoginParams } from '../../../../src/auth/domain/usecases/login.params';
 import { RefreshParams } from '../../../../src/auth/domain/usecases/refresh.params';
 import { LogoutParams } from '../../../../src/auth/domain/usecases/logout.params';
+import { GetCurrentUserParams } from '../../../../src/auth/domain/usecases/get-current-user.params';
 import { AuthenticatedUser } from '../../../../src/auth/presentation/interfaces/authenticated-user.interface';
 
 /**
  * Unit tests for AuthController.
  *
- * All four use cases are mocked. Tests verify:
+ * All five use cases are mocked. Tests verify:
  *   - DTO is correctly mapped to the domain value object.
- *   - AuthResponseDto is correctly shaped from AuthResult.
+ *   - AuthResponseDto / UserProfileDto is correctly shaped from the domain result.
  *   - Domain failures propagate as-is (DomainExceptionFilter handles HTTP mapping).
- *   - logout() reads the userId exclusively from the validated
+ *   - logout() and me() both read the userId exclusively from the validated
  *     AuthenticatedUser injected via @CurrentUser (never from a request body).
  *
  * Mocks are typed via jest.MockedFunction against the use-case method
@@ -40,9 +46,9 @@ import { AuthenticatedUser } from '../../../../src/auth/presentation/interfaces/
  * avoids the unbound-method false positive (the consts are plain functions).
  *
  * The JwtAuthGuard itself is NOT exercised here — this is a unit test that
- * calls authController.logout() directly. Guard rejection (401 on
- * missing/invalid token) is verified by logout.integration.spec.ts against
- * a fully bootstrapped application.
+ * calls authController.logout()/me() directly. Guard rejection (401 on
+ * missing/invalid token) is verified by logout.integration.spec.ts and
+ * me.integration.spec.ts against a fully bootstrapped application.
  *
  * @competency Unit test harness, TDD.
  * @competency Test scenarios: success, conflict, unauthorized paths.
@@ -57,6 +63,9 @@ describe('AuthController', () => {
     jest.fn();
   const logoutExecute: jest.MockedFunction<LogoutUseCase['execute']> =
     jest.fn();
+  const getCurrentUserExecute: jest.MockedFunction<
+    GetCurrentUserUseCase['execute']
+  > = jest.fn();
 
   const MOCK_USER = new UserEntity({
     id: '550e8400-e29b-41d4-a716-446655440000',
@@ -94,6 +103,7 @@ describe('AuthController', () => {
     loginExecute.mockReset();
     refreshExecute.mockReset();
     logoutExecute.mockReset();
+    getCurrentUserExecute.mockReset();
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
@@ -102,6 +112,10 @@ describe('AuthController', () => {
         { provide: LoginUseCase, useValue: { execute: loginExecute } },
         { provide: RefreshUseCase, useValue: { execute: refreshExecute } },
         { provide: LogoutUseCase, useValue: { execute: logoutExecute } },
+        {
+          provide: GetCurrentUserUseCase,
+          useValue: { execute: getCurrentUserExecute },
+        },
       ],
     }).compile();
 
@@ -391,6 +405,89 @@ describe('AuthController', () => {
     });
   });
 
+  // --- GET /auth/me ---
+
+  describe('me()', () => {
+    it('should call GetCurrentUserUseCase.execute with params built from the injected user', async () => {
+      getCurrentUserExecute.mockResolvedValue(MOCK_USER);
+
+      await authController.me(AUTHENTICATED_USER);
+
+      expect(getCurrentUserExecute).toHaveBeenCalledWith(
+        expect.objectContaining<Partial<GetCurrentUserParams>>({
+          userId: AUTHENTICATED_USER.userId,
+        }),
+      );
+      expect(getCurrentUserExecute).toHaveBeenCalledTimes(1);
+    });
+
+    it('should return a UserProfileDto on success', async () => {
+      getCurrentUserExecute.mockResolvedValue(MOCK_USER);
+
+      const response = await authController.me(AUTHENTICATED_USER);
+
+      expect(response).toBeInstanceOf(UserProfileDto);
+    });
+
+    it('should map all profile fields correctly', async () => {
+      getCurrentUserExecute.mockResolvedValue(MOCK_USER);
+
+      const response = await authController.me(AUTHENTICATED_USER);
+
+      expect(response.id).toBe(MOCK_USER.id);
+      expect(response.email).toBe(MOCK_USER.email);
+      expect(response.username).toBe(MOCK_USER.username);
+      expect(response.role).toBe(MOCK_USER.role);
+      expect(response.createdAt).toEqual(MOCK_USER.createdAt);
+    });
+
+    it('should not include accessToken, refreshToken, passwordHash, or refreshTokenHash', async () => {
+      getCurrentUserExecute.mockResolvedValue(MOCK_USER);
+
+      const response = await authController.me(AUTHENTICATED_USER);
+      const record = response as unknown as Record<string, unknown>;
+
+      expect(record.accessToken).toBeUndefined();
+      expect(record.refreshToken).toBeUndefined();
+      expect(record.passwordHash).toBeUndefined();
+      expect(record.refreshTokenHash).toBeUndefined();
+    });
+
+    it('should never read userId from anything other than the injected AuthenticatedUser', async () => {
+      getCurrentUserExecute.mockResolvedValue(MOCK_USER);
+      const otherUser: AuthenticatedUser = {
+        userId: '00000000-0000-4000-8000-000000000000',
+        role: UserRole.GUEST,
+      };
+
+      await authController.me(otherUser);
+
+      expect(getCurrentUserExecute).toHaveBeenCalledWith(
+        expect.objectContaining<Partial<GetCurrentUserParams>>({
+          userId: otherUser.userId,
+        }),
+      );
+    });
+
+    it('should propagate UserNotFoundFailure (filter maps it to 401)', async () => {
+      getCurrentUserExecute.mockRejectedValue(new UserNotFoundFailure());
+
+      await expect(authController.me(AUTHENTICATED_USER)).rejects.toThrow(
+        UserNotFoundFailure,
+      );
+    });
+
+    it('should not swallow unexpected errors', async () => {
+      getCurrentUserExecute.mockRejectedValue(
+        new Error('Database unavailable'),
+      );
+
+      await expect(authController.me(AUTHENTICATED_USER)).rejects.toThrow(
+        'Database unavailable',
+      );
+    });
+  });
+
   // --- DomainExceptionFilter HTTP mappings (unit verification) ---
 
   describe('DomainExceptionFilter HTTP mappings', () => {
@@ -410,6 +507,13 @@ describe('AuthController', () => {
 
     it('should map InvalidRefreshTokenFailure to UnauthorizedException (401)', () => {
       const failure = new InvalidRefreshTokenFailure();
+      const httpException = new UnauthorizedException(failure.message);
+
+      expect(httpException.getStatus()).toBe(401);
+    });
+
+    it('should map UserNotFoundFailure to UnauthorizedException (401)', () => {
+      const failure = new UserNotFoundFailure();
       const httpException = new UnauthorizedException(failure.message);
 
       expect(httpException.getStatus()).toBe(401);

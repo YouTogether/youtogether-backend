@@ -22,6 +22,7 @@ describe('LogoutUseCase', () => {
       login: jest.fn(),
       refresh: jest.fn(),
       logout: jest.fn(),
+      getCurrentUser: jest.fn(),
     } as jest.Mocked<IAuthRepository>;
 
     logoutUseCase = new LogoutUseCase(authRepository);

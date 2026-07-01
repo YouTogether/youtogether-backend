@@ -1,3 +1,4 @@
+import { UserEntity } from '../../domain/entities/user.entity';
 import { UserRole } from '../../domain/enums/user-role.enum';
 
 /**
@@ -12,6 +13,24 @@ export class UserProfileDto {
     public readonly role: UserRole,
     public readonly createdAt: Date,
   ) {}
+
+  /**
+   * Builds a {@link UserProfileDto} from a domain {@link UserEntity}.
+   *
+   * Used directly by GET /auth/me, and indirectly by {@link AuthResponseDto.fromAuthResult}
+   * for register/login/refresh.
+   *
+   * @see AuthController.me
+   */
+  static fromUserEntity(user: UserEntity): UserProfileDto {
+    return new UserProfileDto(
+      user.id,
+      user.email,
+      user.username,
+      user.role,
+      user.createdAt,
+    );
+  }
 }
 
 /**

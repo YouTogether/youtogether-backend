@@ -11,6 +11,7 @@ import {
   EmailAlreadyInUseFailure,
   InvalidCredentialsFailure,
   InvalidRefreshTokenFailure,
+  UserNotFoundFailure,
 } from '../../domain/failures/auth.failure';
 
 /**
@@ -23,6 +24,7 @@ import {
  * - {@link EmailAlreadyInUseFailure}   -> 409 Conflict
  * - {@link InvalidCredentialsFailure}  -> 401 Unauthorized
  * - {@link InvalidRefreshTokenFailure} -> 401 Unauthorized
+ * - {@link UserNotFoundFailure}        -> 401 Unauthorized
  *
  * Apply this filter at the controller level via @UseFilters(DomainExceptionFilter).
  * New domain failures are registered here as the bounded context grows.
@@ -34,13 +36,15 @@ import {
   EmailAlreadyInUseFailure,
   InvalidCredentialsFailure,
   InvalidRefreshTokenFailure,
+  UserNotFoundFailure,
 )
 export class DomainExceptionFilter implements ExceptionFilter {
   catch(
     exception:
       | EmailAlreadyInUseFailure
       | InvalidCredentialsFailure
-      | InvalidRefreshTokenFailure,
+      | InvalidRefreshTokenFailure
+      | UserNotFoundFailure,
     host: ArgumentsHost,
   ): void {
     const ctx = host.switchToHttp();
