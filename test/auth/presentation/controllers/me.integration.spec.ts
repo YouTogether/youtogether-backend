@@ -17,49 +17,58 @@ import { RegisterUseCase } from '../../../../src/auth/domain/usecases/register.u
 import { LoginUseCase } from '../../../../src/auth/domain/usecases/login.usecase';
 import { RefreshUseCase } from '../../../../src/auth/domain/usecases/refresh.usecase';
 import { LogoutUseCase } from '../../../../src/auth/domain/usecases/logout.usecase';
-import { AuthController } from '../../../../src/auth/presentation/controllers/auth.controller';
 import { GetCurrentUserUseCase } from '../../../../src/auth/domain/usecases/get-current-user.usecase';
+import { AuthController } from '../../../../src/auth/presentation/controllers/auth.controller';
 import { DomainExceptionFilter } from '../../../../src/auth/presentation/filters/domain-exception.filter';
 import { JwtAuthGuard } from '../../../../src/auth/presentation/guards/jwt-auth.guard';
 import { JwtStrategy } from '../../../../src/auth/presentation/strategies/jwt.strategy';
 import { CreateUsersTable1714000000000 } from '../../../../src/database/migrations/1714000000000-CreateUsersTable';
 
 /**
- * Integration tests for POST /auth/logout (B-A04-T1).
+ * Integration tests for GET /auth/me (B-A05-T1).
  *
- * Unlike register/login/refresh, this is the first auth endpoint protected
- * by {@link JwtAuthGuard}. The guard is exercised against a fully
- * bootstrapped application — these tests are the authoritative proof that
- * "missing or invalid token returns 401"
- * holds for a concrete protected route, not just in isolation.
+ * The second endpoint (after POST /auth/logout) to mount JwtAuthGuard, and
+ * the first to actually load and return the protected resource behind it.
  *
  * Scenarios covered:
- * - 200 OK:  valid access token, session terminated.
- * - Consequence: the refresh token issued at registration becomes invalid
- *   (POST /auth/refresh subsequently returns 401), proving the DB write.
- * - Idempotency: a second logout call with the same valid access token
- *   still returns 200.
- * - 401: no Authorization header at all.
- * - 401: malformed Authorization header (not a Bearer token).
- * - 401: a syntactically well-formed but invalid/garbage access token.
- * - 401: an access token signed with the wrong secret.
- * - 401: an expired access token.
+ * - 200 OK:  valid access token, correct profile shape, sensitive fields excluded.
+ * - 401:     no Authorization header, malformed header, invalid signature, expired token.
+ * - 401:     token references a user soft-deleted after the token was issued
+ *   (the scenario unique to this endpoint — the token itself is still
+ *   cryptographically valid, but the fresh database lookup rejects it).
  *
  * @competency Integration test harness.
- * @competency Acceptance criteria for B-A04-T1: guard enforced, hash
- *   cleared, subsequent refresh fails.
+ * @competency Acceptance criteria for B-A05-T1: guard enforced, sensitive
+ *   fields excluded, 401 on invalid/expired/orphaned token.
  */
 const TEST_JWT_SECRET =
   process.env.JWT_SECRET ??
   'e675b2f9affdf3609e857294d44289bf4550c658e214dfab162d9f227e087e507b099101d302aeb480003e94527048dd';
 
 interface AuthSuccessBody {
-  user: { id: string; email: string };
+  user: { id: string; email: string; username: string };
   accessToken: string;
-  refreshToken: string;
 }
 
-describe('POST /auth/logout (integration)', () => {
+/**
+ * Shape of the GET /auth/me response body — a bare UserProfileDto, distinct
+ * from AuthSuccessBody (which wraps the profile under `user` alongside
+ * tokens). Declared explicitly so `response.body` can be cast to a known
+ * shape instead of being accessed as `any` (no-unsafe-member-access).
+ */
+interface MeSuccessBody {
+  id: string;
+  email: string;
+  username: string;
+  role: string;
+  createdAt: string;
+  passwordHash?: string;
+  refreshTokenHash?: string;
+  accessToken?: string;
+  refreshToken?: string;
+}
+
+describe('GET /auth/me (integration)', () => {
   let app: INestApplication;
   let httpServer: Server;
   let dataSource: DataSource;
@@ -84,16 +93,7 @@ describe('POST /auth/logout (integration)', () => {
             database: cs.get<string>('DB_TEST_DATABASE', 'youtogether_test'),
             entities: [UserOrmEntity],
             migrations: [CreateUsersTable1714000000000],
-            // No dropSchema: this file runs alongside register/login/refresh
-            // integration specs against the same physical test database.
-            // Dropping the schema here would destroy tables mid-query in a
-            // concurrently running file (this was the root cause of a
-            // "relation users does not exist" failure observed in
-            // login.integration.spec.ts). The migration is idempotent
-            // (CREATE TABLE IF NOT EXISTS), so migrationsRun alone is
-            // sufficient and safe under arbitrary Jest worker parallelism.
-            // Cleanup is scoped to this file's own rows via the
-            // '@logout-test.com' email suffix (see afterEach).
+            dropSchema: true,
             migrationsRun: true,
             synchronize: false,
             logging: false,
@@ -143,67 +143,94 @@ describe('POST /auth/logout (integration)', () => {
     await dataSource.query(
       `DELETE
        FROM "users"
-       WHERE email LIKE '%@logout-test.com'`,
+       WHERE email LIKE '%@me-test.com'`,
     );
   });
 
   const registerSeedUser = async (email: string): Promise<AuthSuccessBody> => {
     const response = await request(httpServer)
       .post('/auth/register')
-      .send({ email, password: 'securepassword', username: 'logoutuser' });
+      .send({ email, password: 'securepassword', username: 'meuser' });
     return response.body as AuthSuccessBody;
   };
 
   // ─── 200 OK ───────────────────────────────────────────────────────
 
   describe('200 OK', () => {
-    it('should return 200 with a valid access token', async () => {
-      const { accessToken } = await registerSeedUser('basic@logout-test.com');
+    it('should return the profile for a valid access token', async () => {
+      const { accessToken } = await registerSeedUser('basic@me-test.com');
 
-      await request(httpServer)
-        .post('/auth/logout')
+      const response = await request(httpServer)
+        .get('/auth/me')
         .set('Authorization', `Bearer ${accessToken}`)
         .expect(200);
+
+      const body = response.body as MeSuccessBody;
+
+      expect(body.email).toBe('basic@me-test.com');
+      expect(body.username).toBe('meuser');
+      expect(body.role).toBe('registered');
+      expect(body.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
+      );
+      expect(body.createdAt).toBeDefined();
     });
 
-    it('should invalidate the refresh token issued at registration', async () => {
-      const { accessToken, refreshToken } = await registerSeedUser(
-        'invalidate@logout-test.com',
+    it('should not include passwordHash, refreshTokenHash, accessToken, or refreshToken', async () => {
+      const { accessToken } = await registerSeedUser('noleak@me-test.com');
+
+      const response = await request(httpServer)
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      const body = response.body as MeSuccessBody;
+
+      expect(body.passwordHash).toBeUndefined();
+      expect(body.refreshTokenHash).toBeUndefined();
+      expect(body.accessToken).toBeUndefined();
+      expect(body.refreshToken).toBeUndefined();
+    });
+
+    it('should return the same profile id across repeated calls with the same token', async () => {
+      const { accessToken } = await registerSeedUser('repeat@me-test.com');
+
+      const first = await request(httpServer)
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      const second = await request(httpServer)
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(200);
+
+      const firstBody = first.body as MeSuccessBody;
+      const secondBody = second.body as MeSuccessBody;
+
+      expect(firstBody.id).toBe(secondBody.id);
+    });
+  });
+
+  // ─── 401 — orphaned token (unique to this endpoint) ────────────────
+
+  describe('401 — token valid but account no longer active', () => {
+    it('should return 401 when the account was soft-deleted after the token was issued', async () => {
+      const { accessToken } = await registerSeedUser('deleted@me-test.com');
+
+      // Simulate the account being deactivated after the access token
+      // was already handed to the client — the token itself remains
+      // cryptographically valid for its full lifetime.
+      await dataSource.query(
+        `UPDATE "users"
+         SET deleted_at = now()
+         WHERE email = 'deleted@me-test.com'`,
       );
 
       await request(httpServer)
-        .post('/auth/logout')
+        .get('/auth/me')
         .set('Authorization', `Bearer ${accessToken}`)
-        .expect(200);
-
-      await request(httpServer)
-        .post('/auth/refresh')
-        .send({ refreshToken })
         .expect(401);
-    });
-
-    it('should be idempotent: a second logout with the same access token still returns 200', async () => {
-      const { accessToken } = await registerSeedUser('twice@logout-test.com');
-
-      await request(httpServer)
-        .post('/auth/logout')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .expect(200);
-
-      await request(httpServer)
-        .post('/auth/logout')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .expect(200);
-    });
-
-    it('should not require or accept a request body', async () => {
-      const { accessToken } = await registerSeedUser('nobody@logout-test.com');
-
-      await request(httpServer)
-        .post('/auth/logout')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({})
-        .expect(200);
     });
   });
 
@@ -211,35 +238,32 @@ describe('POST /auth/logout (integration)', () => {
 
   describe('401 Unauthorized — JwtAuthGuard enforcement', () => {
     it('should return 401 when no Authorization header is present', async () => {
-      await request(httpServer).post('/auth/logout').expect(401);
+      await request(httpServer).get('/auth/me').expect(401);
     });
 
     it('should return 401 when the Authorization header is not a Bearer token', async () => {
       await request(httpServer)
-        .post('/auth/logout')
+        .get('/auth/me')
         .set('Authorization', 'Basic dXNlcjpwYXNz')
         .expect(401);
     });
 
     it('should return 401 for a syntactically invalid token', async () => {
       await request(httpServer)
-        .post('/auth/logout')
+        .get('/auth/me')
         .set('Authorization', 'Bearer not-a-real-jwt')
         .expect(401);
     });
 
     it('should return 401 for a token signed with the wrong secret', async () => {
       const forgedToken = sign(
-        {
-          sub: '550e8400-e29b-41d4-a716-446655440000',
-          role: 'registered',
-        },
+        { sub: '550e8400-e29b-41d4-a716-446655440000', role: 'registered' },
         'a-completely-different-secret',
         { expiresIn: '15m' },
       );
 
       await request(httpServer)
-        .post('/auth/logout')
+        .get('/auth/me')
         .set('Authorization', `Bearer ${forgedToken}`)
         .expect(401);
     });
@@ -255,32 +279,22 @@ describe('POST /auth/logout (integration)', () => {
       );
 
       await request(httpServer)
-        .post('/auth/logout')
+        .get('/auth/me')
         .set('Authorization', `Bearer ${expiredToken}`)
         .expect(401);
     });
 
-    it('should not clear any session when the guard rejects the request', async () => {
-      const { accessToken, refreshToken } = await registerSeedUser(
-        'guardreject@logout-test.com',
+    it('should return 401 for a well-formed token referencing an unknown user id', async () => {
+      const tokenForUnknownUser = sign(
+        { sub: '00000000-0000-4000-8000-000000000000', role: 'registered' },
+        TEST_JWT_SECRET,
+        { expiresIn: '15m' },
       );
 
       await request(httpServer)
-        .post('/auth/logout')
-        .set('Authorization', 'Bearer garbage-token')
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${tokenForUnknownUser}`)
         .expect(401);
-
-      // The legitimate session must remain intact: refresh still works,
-      // and a properly authenticated logout still succeeds afterward.
-      await request(httpServer)
-        .post('/auth/refresh')
-        .send({ refreshToken })
-        .expect(200);
-
-      await request(httpServer)
-        .post('/auth/logout')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .expect(200);
     });
   });
 });

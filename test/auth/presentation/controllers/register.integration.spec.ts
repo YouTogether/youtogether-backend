@@ -20,6 +20,7 @@ import { RefreshUseCase } from '../../../../src/auth/domain/usecases/refresh.use
 import { AuthController } from '../../../../src/auth/presentation/controllers/auth.controller';
 import { DomainExceptionFilter } from '../../../../src/auth/presentation/filters/domain-exception.filter';
 import { CreateUsersTable1714000000000 } from '../../../../src/database/migrations/1714000000000-CreateUsersTable';
+import { GetCurrentUserUseCase } from '../../../../src/auth/domain/usecases/get-current-user.usecase';
 
 /**
  * Shape of the successful registration response body (HTTP 201).
@@ -153,6 +154,7 @@ describe('POST /auth/register (integration)', () => {
         LoginUseCase,
         LogoutUseCase,
         RefreshUseCase,
+        GetCurrentUserUseCase,
         TokenService,
         { provide: IAuthRepository, useClass: AuthRepositoryImpl },
       ],

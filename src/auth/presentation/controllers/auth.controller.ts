@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
@@ -8,6 +9,8 @@ import {
   UseGuards,
 } from '@nestjs/common';
 
+import { GetCurrentUserUseCase } from '../../domain/usecases/get-current-user.usecase';
+import { GetCurrentUserParams } from '../../domain/usecases/get-current-user.params';
 import { LoginUseCase } from '../../domain/usecases/login.usecase';
 import { LoginParams } from '../../domain/usecases/login.params';
 import { LogoutUseCase } from '../../domain/usecases/logout.usecase';
@@ -17,7 +20,7 @@ import { RefreshParams } from '../../domain/usecases/refresh.params';
 import { RegisterUseCase } from '../../domain/usecases/register.usecase';
 import { RegisterParams } from '../../domain/usecases/register.params';
 import { AuthResult } from '../../domain/value-objects/auth-result.vo';
-import { AuthResponseDto } from '../dtos/auth-response.dto';
+import { AuthResponseDto, UserProfileDto } from '../dtos/auth-response.dto';
 import { LoginDto } from '../dtos/login.dto';
 import { RefreshTokenDto } from '../dtos/refresh-token.dto';
 import { RegisterDto } from '../dtos/register.dto';
@@ -41,11 +44,13 @@ import { AuthenticatedUser } from '../interfaces/authenticated-user.interface';
  * - POST /auth/login    -> {@link LoginUseCase}
  * - POST /auth/refresh  -> {@link RefreshUseCase}
  * - POST /auth/logout   -> {@link LogoutUseCase} (protected by {@link JwtAuthGuard})
+ * - GET  /auth/me        -> {@link GetCurrentUserUseCase} (protected by {@link JwtAuthGuard})
  *
  * @see RegisterUseCase
  * @see LoginUseCase
  * @see RefreshUseCase
  * @see LogoutUseCase
+ * @see GetCurrentUserUseCase
  * @see DomainExceptionFilter
  */
 @Controller('auth')
@@ -56,6 +61,7 @@ export class AuthController {
     private readonly loginUseCase: LoginUseCase,
     private readonly refreshUseCase: RefreshUseCase,
     private readonly logoutUseCase: LogoutUseCase,
+    private readonly getCurrentUserUseCase: GetCurrentUserUseCase,
   ) {}
 
   /**
@@ -153,9 +159,39 @@ export class AuthController {
   }
 
   /**
+   * GET /auth/me
+   *
+   * Returns the authenticated user's current profile, excluding sensitive
+   * fields (passwordHash, refreshTokenHash). Performs a fresh database
+   * lookup rather than trusting the access token's claims alone, so a
+   * client discovers promptly if the account was deactivated after the
+   * token was issued.
+   *
+   * Requires a valid, non-expired access token via {@link JwtAuthGuard}.
+   * The user id is taken exclusively from the validated token (via
+   * {@link CurrentUser}).
+   *
+   * HTTP status codes:
+   * - 200 OK           — profile returned.
+   * - 401 Unauthorized — missing, invalid, or expired access token, or the
+   *   token's user no longer resolves to an active account.
+   */
+  @Get('me')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async me(@CurrentUser() user: AuthenticatedUser): Promise<UserProfileDto> {
+    const currentUser = await this.getCurrentUserUseCase.execute(
+      new GetCurrentUserParams({ userId: user.userId }),
+    );
+
+    return UserProfileDto.fromUserEntity(currentUser);
+  }
+
+  /**
    * Shapes the shared {@link AuthResponseDto} from an {@link AuthResult}.
    * Used by register, login, and refresh to avoid duplicating the mapping
-   * logic. logout() has no AuthResult to map — it returns void.
+   * logic. logout() has no AuthResult to map — it returns void. me()
+   * returns a bare {@link UserProfileDto} — it has no tokens to include.
    */
   private toResponse(result: AuthResult): AuthResponseDto {
     return AuthResponseDto.fromAuthResult({

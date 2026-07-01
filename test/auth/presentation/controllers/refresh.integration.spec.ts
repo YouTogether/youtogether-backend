@@ -22,6 +22,7 @@ import { AuthController } from '../../../../src/auth/presentation/controllers/au
 import { DomainExceptionFilter } from '../../../../src/auth/presentation/filters/domain-exception.filter';
 import { JwtStrategy } from '../../../../src/auth/presentation/strategies/jwt.strategy';
 import { CreateUsersTable1714000000000 } from '../../../../src/database/migrations/1714000000000-CreateUsersTable';
+import { GetCurrentUserUseCase } from '../../../../src/auth/domain/usecases/get-current-user.usecase';
 
 /**
  * Integration tests for POST /auth/refresh.
@@ -88,6 +89,7 @@ describe('POST /auth/refresh (integration)', () => {
         LoginUseCase,
         LogoutUseCase,
         RefreshUseCase,
+        GetCurrentUserUseCase,
         TokenService,
         JwtStrategy,
         { provide: IAuthRepository, useClass: AuthRepositoryImpl },

@@ -2,6 +2,8 @@ import { RegisterParams } from '../usecases/register.params';
 import { RefreshParams } from '../usecases/refresh.params';
 import { LoginParams } from '../usecases/login.params';
 import { LogoutParams } from '../usecases/logout.params';
+import { GetCurrentUserParams } from '../usecases/get-current-user.params';
+import { UserEntity } from '../entities/user.entity';
 import { AuthResult } from '../value-objects/auth-result.vo';
 
 /**
@@ -85,4 +87,19 @@ export abstract class IAuthRepository {
    *   from the validated access token by {@link JwtAuthGuard}.
    */
   abstract logout(params: LogoutParams): Promise<void>;
+
+  /**
+   * Retrieves the profile of the currently authenticated user.
+   *
+   * Performs a fresh database lookup rather than trusting the token's
+   * claims alone: this is the mechanism by which a client with a valid,
+   * unexpired access token discovers that the underlying account has been
+   * soft-deleted (or otherwise deactivated) since the token was issued.
+   *
+   * @param params - The id of the currently authenticated user.
+   * @returns The {@link UserEntity} for the active user, excluding
+   *   sensitive fields (passwordHash, refreshTokenHash, deletedAt).
+   * @throws {@link UserNotFoundFailure} when no active user matches the id.
+   */
+  abstract getCurrentUser(params: GetCurrentUserParams): Promise<UserEntity>;
 }
