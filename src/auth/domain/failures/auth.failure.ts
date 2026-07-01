@@ -64,3 +64,30 @@ export class InvalidRefreshTokenFailure extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
+
+/**
+ * Thrown by the auth repository when a cryptographically valid access
+ * token's `sub` claim does not resolve to an active (non-deleted) user.
+ *
+ * This is distinct from an invalid/expired token — the guard already
+ * confirmed the token's signature and expiration. This failure covers the
+ * narrower window where the account was deleted (or otherwise deactivated)
+ * *after* the token was issued but *before* it expired. It is treated as
+ * an invalid session rather than a "resource not found" (404): from the
+ * client's perspective, the outcome is identical to any other session
+ * invalidation, and 401 avoids revealing account-existence information via
+ * a different status code.
+ *
+ * The presentation layer maps this failure to HTTP 401 Unauthorized.
+ *
+ * @see IAuthRepository.getCurrentUser
+ * @see DomainExceptionFilter
+ * @competency Session validity beyond token cryptographic checks (B-A05-T1)
+ */
+export class UserNotFoundFailure extends Error {
+  constructor() {
+    super('User not found or no longer active.');
+    this.name = 'UserNotFoundFailure';
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
