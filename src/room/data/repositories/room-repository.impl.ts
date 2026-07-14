@@ -54,4 +54,25 @@ export class RoomRepositoryImpl implements IRoomRepository {
       return RoomMapper.toDomain(savedRoom, 1);
     });
   }
+
+  /**
+   * Resolves the owner id of a room, for use by {@link OwnershipGuard}.
+   *
+   * Relies on TypeORM's default soft-delete filtering: since
+   * {@link RoomOrmEntity.deletedAt} is a `@DeleteDateColumn`, `findOne`
+   * automatically excludes soft-deleted rows without an explicit
+   * `deletedAt: IsNull()` clause.
+   *
+   * @param roomId - The room's id, taken from the route parameter.
+   * @returns The owner's user id, or `null` if no active room exists
+   *   with this id.
+   */
+  async findOwnerId(roomId: string): Promise<string | null> {
+    const room = await this.dataSource.getRepository(RoomOrmEntity).findOne({
+      where: { id: roomId },
+      select: ['ownerId'],
+    });
+
+    return room?.ownerId ?? null;
+  }
 }
