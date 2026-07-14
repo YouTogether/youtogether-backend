@@ -7,6 +7,7 @@ import { RoomMembershipOrmEntity } from './data/entities/room-membership.orm-ent
 import { RoomRepositoryImpl } from './data/repositories/room-repository.impl';
 import { IRoomRepository } from './domain/repositories/room-repository.interface';
 import { CreateRoomUseCase } from './domain/usecases/create-room.usecase';
+import { OwnershipGuard } from './presentation/guards/ownership.guard';
 import { RoomController } from './presentation/controllers/room.controller';
 
 /**
@@ -29,6 +30,7 @@ import { RoomController } from './presentation/controllers/room.controller';
   controllers: [RoomController],
   providers: [
     CreateRoomUseCase,
+    OwnershipGuard,
     {
       provide: IRoomRepository,
       useClass: RoomRepositoryImpl,
