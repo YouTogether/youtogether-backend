@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.0](https://github.com/YouTogether/youtogether-backend/compare/v0.1.1...v0.2.0) (2026-07-14)
+
+
+### Features
+
+* **room:** [B-R01-T1] create rooms migration ([#38](https://github.com/YouTogether/youtogether-backend/issues/38)) ([eff3480](https://github.com/YouTogether/youtogether-backend/commit/eff3480eccd86d6fe666b7a2a2aef78988138421))
+
 ## [0.1.1](https://github.com/YouTogether/youtogether-backend/compare/v1.0.0...v1.1.0) (2026-07-06)
 
 
