@@ -1,6 +1,7 @@
 import { DataSource, QueryRunner } from 'typeorm';
 
 import { CreateUsersTable1714000000000 } from '../../../../src/database/migrations/1714000000000-CreateUsersTable';
+import { CreateRoomsTable1784015715536 } from '../../../../src/database/migrations/1784015715536-CreateRoomsTable';
 
 /**
  * Integration tests for the CreateUsersTable migration.
@@ -229,6 +230,22 @@ describe('CreateUsersTable Migration (integration)', () => {
   it('should revert cleanly (down removes table and enum)', async () => {
     const queryRunner: QueryRunner = dataSource.createQueryRunner();
     const migration = new CreateUsersTable1714000000000();
+    const roomsMigration = new CreateRoomsTable1784015715536();
+
+    // Since, "rooms" and "room_memberships" hold a
+    // foreign key to "users" (rooms.owner_id, room_memberships.user_id).
+    // On the shared integration test database, those tables are already
+    // present by the time this test runs (create-rooms-table.integration.spec.ts
+    // and create-room.integration.spec.ts leave them in place, matching the
+    // idempotent "leave tables for other suites" convention already
+    // established for "users" itself in this file's own afterAll).
+    // Reverting CreateUsersTable therefore requires first reverting the
+    // later, dependent migration — exactly what `typeorm migration:revert`
+    // does in production (most recent first). Calling
+    // CreateUsersTable.down() without this step is not a valid
+    // migration-revert scenario and fails with a Postgres FK dependency
+    // error ("cannot drop table users because other objects depend on it").
+    await roomsMigration.down(queryRunner);
 
     await migration.down(queryRunner);
 
@@ -249,8 +266,11 @@ describe('CreateUsersTable Migration (integration)', () => {
     const enums = rawEnums as EnumInfo[];
     expect(enums).toHaveLength(0);
 
-    // Re-run up so afterAll cleanup has a table to drop
+    // Re-run up in the correct order (users, then its dependent) so
+    // afterAll cleanup — and any other suite sharing this database —
+    // finds "users", "rooms", and "room_memberships" all present again.
     await migration.up(queryRunner);
+    await roomsMigration.up(queryRunner);
     await queryRunner.release();
   });
 });
