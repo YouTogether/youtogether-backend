@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/YouTogether/youtogether-backend/compare/v0.2.0...v0.3.0) (2026-07-14)
+
+
+### Features
+
+* **room:** [B-R01-T2] create room endpoint ([#40](https://github.com/YouTogether/youtogether-backend/issues/40)) ([9d377f3](https://github.com/YouTogether/youtogether-backend/commit/9d377f3b9ddbc5191f9a7900e9d498f8974d6952))
+
 ## [0.2.0](https://github.com/YouTogether/youtogether-backend/compare/v0.1.1...v0.2.0) (2026-07-14)
 
 
