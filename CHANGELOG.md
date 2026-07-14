@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/YouTogether/youtogether-backend/compare/v0.3.0...v0.4.0) (2026-07-14)
+
+
+### Features
+
+* **room:** [B-R04-T1] ownership guard implementation ([#42](https://github.com/YouTogether/youtogether-backend/issues/42)) ([4227b43](https://github.com/YouTogether/youtogether-backend/commit/4227b43c41583e6070df64b10688983c490c0574))
+
 ## [0.3.0](https://github.com/YouTogether/youtogether-backend/compare/v0.2.0...v0.3.0) (2026-07-14)
 
 
