@@ -25,4 +25,17 @@ export abstract class IRoomRepository {
    * @returns The persisted {@link RoomEntity}, with `memberCount` set to 1.
    */
   abstract create(params: CreateRoomParams): Promise<RoomEntity>;
+
+  /**
+   * Resolves the owner id of a room, for use by {@link OwnershipGuard}.
+   *
+   * A dedicated lookup rather than a full `getById()` (introduced later):
+   * the guard needs only the owner id to authorize the request,
+   * not the full aggregate.
+   *
+   * @param roomId - The room's id, taken from the route parameter.
+   * @returns The owner's user id, or `null` if no active (non-deleted)
+   *   room exists with this id.
+   */
+  abstract findOwnerId(roomId: string): Promise<string | null>;
 }
