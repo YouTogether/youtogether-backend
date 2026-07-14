@@ -35,13 +35,16 @@ describe('CreateRoomUseCase', () => {
   });
 
   const findOwnerIdMock = jest.fn<Promise<string | null>, [string]>();
+  const getPublicRoomsMock = jest.fn<Promise<RoomEntity[]>, []>();
 
   beforeEach(() => {
     createMock.mockReset();
     findOwnerIdMock.mockReset();
+    getPublicRoomsMock.mockReset();
     const roomRepository: IRoomRepository = {
       create: createMock,
       findOwnerId: findOwnerIdMock,
+      getPublicRooms: getPublicRoomsMock,
     };
     createRoomUseCase = new CreateRoomUseCase(roomRepository);
   });

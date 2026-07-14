@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Get,
   HttpCode,
   HttpStatus,
   Post,
@@ -9,6 +10,7 @@ import {
 
 import { CreateRoomUseCase } from '../../domain/usecases/create-room.usecase';
 import { CreateRoomParams } from '../../domain/usecases/create-room.params';
+import { GetPublicRoomsUseCase } from '../../domain/usecases/get-public-rooms.usecase';
 import { CreateRoomDto } from '../dtos/create-room.dto';
 import { RoomResponseDto } from '../dtos/room-response.dto';
 import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
@@ -28,12 +30,17 @@ import { AuthenticatedUser } from '../../../auth/presentation/interfaces/authent
  *
  * Routes:
  * - POST /rooms -> {@link CreateRoomUseCase} (protected by {@link JwtAuthGuard})
+ * - GET  /rooms -> {@link GetPublicRoomsUseCase} (no authentication required)
  *
  * @see CreateRoomUseCase
+ * @see GetPublicRoomsUseCase
  */
 @Controller('rooms')
 export class RoomController {
-  constructor(private readonly createRoomUseCase: CreateRoomUseCase) {}
+  constructor(
+    private readonly createRoomUseCase: CreateRoomUseCase,
+    private readonly getPublicRoomsUseCase: GetPublicRoomsUseCase,
+  ) {}
 
   /**
    * POST /rooms
@@ -68,5 +75,23 @@ export class RoomController {
     );
 
     return RoomResponseDto.fromRoomEntity(room);
+  }
+
+  /**
+   * GET /rooms
+   *
+   * Returns every active, public room, each annotated with its current
+   * active member count. No authentication required — guest access is
+   * permitted for public room discovery.
+   *
+   * HTTP status codes:
+   * - 200 OK — list returned (possibly empty).
+   */
+  @Get()
+  @HttpCode(HttpStatus.OK)
+  async findAll(): Promise<RoomResponseDto[]> {
+    const rooms = await this.getPublicRoomsUseCase.execute();
+
+    return rooms.map((room) => RoomResponseDto.fromRoomEntity(room));
   }
 }

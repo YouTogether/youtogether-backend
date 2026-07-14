@@ -38,4 +38,13 @@ export abstract class IRoomRepository {
    *   room exists with this id.
    */
   abstract findOwnerId(roomId: string): Promise<string | null>;
+
+  /**
+   * Returns every active (non-deleted), public room, each annotated with
+   * its current active member count.
+   *
+   * @returns An array of {@link RoomEntity}, ordered most recently
+   *   created first. Empty array if no public rooms exist.
+   */
+  abstract getPublicRooms(): Promise<RoomEntity[]>;
 }

@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { RoomController } from '../../../../src/room/presentation/controllers/room.controller';
 import { CreateRoomUseCase } from '../../../../src/room/domain/usecases/create-room.usecase';
 import { CreateRoomParams } from '../../../../src/room/domain/usecases/create-room.params';
+import { GetPublicRoomsUseCase } from '../../../../src/room/domain/usecases/get-public-rooms.usecase';
 import { CreateRoomDto } from '../../../../src/room/presentation/dtos/create-room.dto';
 import { RoomResponseDto } from '../../../../src/room/presentation/dtos/room-response.dto';
 import { RoomEntity } from '../../../../src/room/domain/entities/room.entity';
@@ -10,7 +11,7 @@ import { AuthenticatedUser } from '../../../../src/auth/presentation/interfaces/
 import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 
 /**
- * Unit tests for RoomController (B-R01-T2 — presentation layer).
+ * Unit tests for RoomController.
  *
  * CreateRoomUseCase is mocked. Tests verify:
  *   - The DTO and the authenticated user are correctly mapped to CreateRoomParams.
@@ -22,14 +23,17 @@ import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
  * controller method directly) — guard rejection (401) is verified by
  * create-room.integration.spec.ts against a fully bootstrapped application.
  *
- * @competency C2.2.2 — Unit test harness, TDD.
- * @competency C2.3.1 — Test scenarios R-CRE-01, R-CRE-05 (delegation, auth boundary).
+ * @competency Unit test harness, TDD.
+ * @competency Test scenarios R-CRE-01, R-CRE-05 (delegation, auth boundary).
  */
 describe('RoomController', () => {
   let roomController: RoomController;
 
   const createExecute: jest.MockedFunction<CreateRoomUseCase['execute']> =
     jest.fn();
+  const getPublicRoomsExecute: jest.MockedFunction<
+    GetPublicRoomsUseCase['execute']
+  > = jest.fn();
 
   const AUTHENTICATED_USER: AuthenticatedUser = {
     userId: '550e8400-e29b-41d4-a716-446655440000',
@@ -55,11 +59,16 @@ describe('RoomController', () => {
 
   beforeEach(async () => {
     createExecute.mockReset();
+    getPublicRoomsExecute.mockReset();
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RoomController],
       providers: [
         { provide: CreateRoomUseCase, useValue: { execute: createExecute } },
+        {
+          provide: GetPublicRoomsUseCase,
+          useValue: { execute: getPublicRoomsExecute },
+        },
       ],
     }).compile();
 
@@ -151,6 +160,56 @@ describe('RoomController', () => {
       await expect(
         roomController.create(VALID_DTO, AUTHENTICATED_USER),
       ).rejects.toThrow('Database unavailable');
+    });
+  });
+
+  // --- GET /rooms (B-R02-T1) ---
+
+  describe('findAll()', () => {
+    const MOCK_ROOMS = [MOCK_ROOM];
+
+    it('should return a list of RoomResponseDto', async () => {
+      getPublicRoomsExecute.mockResolvedValue(MOCK_ROOMS);
+
+      const response = await roomController.findAll();
+
+      expect(response).toHaveLength(1);
+      expect(response[0]).toBeInstanceOf(RoomResponseDto);
+    });
+
+    it('should call GetPublicRoomsUseCase.execute with no arguments', async () => {
+      getPublicRoomsExecute.mockResolvedValue(MOCK_ROOMS);
+
+      await roomController.findAll();
+
+      expect(getPublicRoomsExecute).toHaveBeenCalledWith();
+    });
+
+    it('should return an empty array when no public rooms exist (R-LST-06)', async () => {
+      getPublicRoomsExecute.mockResolvedValue([]);
+
+      const response = await roomController.findAll();
+
+      expect(response).toEqual([]);
+    });
+
+    it('should map all RoomEntity fields into each response item', async () => {
+      getPublicRoomsExecute.mockResolvedValue(MOCK_ROOMS);
+
+      const [response] = await roomController.findAll();
+
+      expect(response.id).toBe(MOCK_ROOM.id);
+      expect(response.memberCount).toBe(MOCK_ROOM.memberCount);
+    });
+
+    it('should not swallow unexpected errors', async () => {
+      getPublicRoomsExecute.mockRejectedValue(
+        new Error('Database unavailable'),
+      );
+
+      await expect(roomController.findAll()).rejects.toThrow(
+        'Database unavailable',
+      );
     });
   });
 });

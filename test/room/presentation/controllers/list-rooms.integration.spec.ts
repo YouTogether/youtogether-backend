@@ -6,7 +6,6 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getDataSourceToken, TypeOrmModule } from '@nestjs/typeorm';
-import { sign } from 'jsonwebtoken';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
 
@@ -23,49 +22,36 @@ import { GetPublicRoomsUseCase } from '../../../../src/room/domain/usecases/get-
 import { RoomController } from '../../../../src/room/presentation/controllers/room.controller';
 
 /**
- * Integration tests for POST /rooms.
+ * Integration tests for GET /rooms (B-R02-T1).
  *
- * Boots a minimal NestJS application with a real PostgreSQL test database,
- * seeding a real `users` row (required by the `rooms.owner_id` foreign
- * key) and signing a JWT directly rather than exercising the full
- * register/login flow, mirroring `me.integration.spec.ts`.
+ * Seeds a mix of public/private and active/soft-deleted rooms, with
+ * memberships in both active and left states, then verifies the listing
+ * query filters and computes member counts correctly.
  *
- * Scenarios covered:
- * - 201 Created: valid payload, room persisted, owner auto-joined as a member.
- * - 201 Created: is_public defaults to true when omitted.
- * - 400 Bad Request: missing name, name exceeding 100 characters.
- * - 401 Unauthorized: no Authorization header.
+ * Scenarios covered (see cahier de recette §3, R-LST-01 through R-LST-07):
+ * - 200 OK, no Authorization header required.
+ * - Only public, non-deleted rooms returned.
+ * - Active member count excludes memberships with left_at set.
  *
- * @competency Integration test harness.
- * @competency Test scenarios and expected results.
+ * @competency C2.2.2 — Integration test harness.
+ * @competency C2.3.1 — Test scenarios and expected results (cahier de recette).
  */
 const TEST_JWT_SECRET =
   process.env.JWT_SECRET ??
   'e675b2f9affdf3609e857294d44289bf4550c658e214dfab162d9f227e087e507b099101d302aeb480003e94527048dd';
 
-interface RoomSuccessBody {
+interface RoomListItemBody {
   id: string;
   name: string;
-  description: string | null;
-  ownerId: string;
   isPublic: boolean;
   memberCount: number;
-  createdAt: string;
-  updatedAt: string;
 }
 
-interface ErrorBody {
-  statusCode: number;
-  message: string | string[];
-  error: string;
-}
-
-describe('POST /rooms (integration)', () => {
+describe('GET /rooms (integration)', () => {
   let app: INestApplication;
   let httpServer: Server;
   let dataSource: DataSource;
   let ownerId: string;
-  let accessToken: string;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -108,10 +94,6 @@ describe('POST /rooms (integration)', () => {
                 CreateUsersTable1714000000000,
                 CreateRoomsTable1784015715536,
               ],
-              // Idempotent migrations (CREATE TABLE IF NOT EXISTS): safe to
-              // run alongside other *.integration.spec.ts files sharing the
-              // same physical test database. See create-users-table spec
-              // for the full rationale.
               migrationsRun: true,
               synchronize: false,
               logging: ['error' as const],
@@ -149,18 +131,52 @@ describe('POST /rooms (integration)', () => {
     httpServer = app.getHttpServer() as Server;
     dataSource = module.get<DataSource>(getDataSourceToken());
 
-    // Seed a real user row directly (bypasses the Authentication bounded
-    // context entirely — this suite tests Room, not Auth) to satisfy the
-    // rooms.owner_id foreign key.
     const rawUser: unknown = await dataSource.query(`
         INSERT INTO "users" (email, password_hash, username)
-        VALUES ('room-creator@integration-test.com', '$2b$12$fakehashvalue', 'room_creator') RETURNING id;
+        VALUES ('listing-owner@integration-test.com', '$2b$12$fakehashvalue', 'listing_owner') RETURNING id;
     `);
     ownerId = (rawUser as { id: string }[])[0].id;
 
-    accessToken = sign({ sub: ownerId, role: 'registered' }, TEST_JWT_SECRET, {
-      expiresIn: '15m',
-    });
+    const rawMember: unknown = await dataSource.query(`
+        INSERT INTO "users" (email, password_hash, username)
+        VALUES ('listing-member@integration-test.com', '$2b$12$fakehashvalue', 'listing_member') RETURNING id;
+    `);
+    const memberId = (rawMember as { id: string }[])[0].id;
+
+    const rawLeftMember: unknown = await dataSource.query(`
+        INSERT INTO "users" (email, password_hash, username)
+        VALUES ('listing-left-member@integration-test.com', '$2b$12$fakehashvalue', 'listing_left_member') RETURNING id;
+    `);
+    const leftMemberId = (rawLeftMember as { id: string }[])[0].id;
+
+    // Public, active room with 3 active members (owner + 2) and 1 who left.
+    const rawPublicRoom: unknown = await dataSource.query(`
+        INSERT INTO "rooms" (name, owner_id, is_public)
+        VALUES ('Public Active Room', '${ownerId}', true) RETURNING id;
+    `);
+    const publicRoomId = (rawPublicRoom as { id: string }[])[0].id;
+
+    await dataSource.query(`
+        INSERT INTO "room_memberships" (room_id, user_id)
+        VALUES ('${publicRoomId}', '${ownerId}'),
+               ('${publicRoomId}', '${memberId}');
+    `);
+    await dataSource.query(`
+        INSERT INTO "room_memberships" (room_id, user_id, left_at)
+        VALUES ('${publicRoomId}', '${leftMemberId}', now());
+    `);
+
+    // Private room — must be excluded from the listing.
+    await dataSource.query(`
+        INSERT INTO "rooms" (name, owner_id, is_public)
+        VALUES ('Private Room', '${ownerId}', false);
+    `);
+
+    // Public but soft-deleted room — must be excluded from the listing.
+    await dataSource.query(`
+        INSERT INTO "rooms" (name, owner_id, is_public, deleted_at)
+        VALUES ('Deleted Public Room', '${ownerId}', true, now());
+    `);
   });
 
   afterAll(async () => {
@@ -173,92 +189,38 @@ describe('POST /rooms (integration)', () => {
     await dataSource.query(`DELETE
                             FROM "rooms"
                             WHERE owner_id = '${ownerId}';`);
-    await dataSource.query(
-      `DELETE
-       FROM "users"
-       WHERE email = 'room-creator@integration-test.com';`,
-    );
+    await dataSource.query(`
+        DELETE
+        FROM "users"
+        WHERE email IN (
+                        'listing-owner@integration-test.com',
+                        'listing-member@integration-test.com',
+                        'listing-left-member@integration-test.com'
+            );
+    `);
     await app.close();
   });
 
-  // ─── 201 Created ──────────────────────────────────────────────────
-
-  describe('201 Created', () => {
-    it('should create a room and auto-join the owner as a member (R-CRE-01)', async () => {
-      const response = await request(httpServer)
-        .post('/rooms')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ name: 'Friday Movie Night', description: 'Weekly watch party' })
-        .expect(201);
-
-      const body = response.body as RoomSuccessBody;
-
-      expect(body.name).toBe('Friday Movie Night');
-      expect(body.description).toBe('Weekly watch party');
-      expect(body.ownerId).toBe(ownerId);
-      expect(body.isPublic).toBe(true);
-      expect(body.memberCount).toBe(1);
-      expect(body.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-      );
-
-      const rawMembership: unknown = await dataSource.query(`
-          SELECT room_id, user_id, left_at
-          FROM "room_memberships"
-          WHERE room_id = '${body.id}'
-            AND user_id = '${ownerId}';
-      `);
-      const memberships = rawMembership as { left_at: Date | null }[];
-      expect(memberships).toHaveLength(1);
-      expect(memberships[0].left_at).toBeNull();
-    });
-
-    it('should default is_public to true when omitted (R-CRE-05)', async () => {
-      const response = await request(httpServer)
-        .post('/rooms')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ name: 'Default Visibility Room' })
-        .expect(201);
-
-      const body = response.body as RoomSuccessBody;
-      expect(body.isPublic).toBe(true);
-    });
+  it('should return 200 with no Authorization header (R-LST-01)', async () => {
+    await request(httpServer).get('/rooms').expect(200);
   });
 
-  // ─── 400 Bad Request ──────────────────────────────────────────────
+  it('should return only public, non-deleted rooms (R-LST-05)', async () => {
+    const response = await request(httpServer).get('/rooms').expect(200);
+    const body = response.body as RoomListItemBody[];
 
-  describe('400 Bad Request', () => {
-    it('should reject a missing name (R-CRE-03)', async () => {
-      const response = await request(httpServer)
-        .post('/rooms')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ description: 'no name here' })
-        .expect(400);
-
-      const body = response.body as ErrorBody;
-      expect(body.statusCode).toBe(400);
-    });
-
-    it('should reject a name exceeding 100 characters (R-CRE-04)', async () => {
-      const response = await request(httpServer)
-        .post('/rooms')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ name: 'a'.repeat(101) })
-        .expect(400);
-
-      const body = response.body as ErrorBody;
-      expect(body.statusCode).toBe(400);
-    });
+    const names = body.map((room) => room.name);
+    expect(names).toContain('Public Active Room');
+    expect(names).not.toContain('Private Room');
+    expect(names).not.toContain('Deleted Public Room');
   });
 
-  // ─── 401 Unauthorized ─────────────────────────────────────────────
+  it('should compute the active member count, excluding members who left (R-LST-02)', async () => {
+    const response = await request(httpServer).get('/rooms').expect(200);
+    const body = response.body as RoomListItemBody[];
 
-  describe('401 Unauthorized', () => {
-    it('should reject a request with no Authorization header (R-CRE-06)', async () => {
-      await request(httpServer)
-        .post('/rooms')
-        .send({ name: 'Unauthenticated Room' })
-        .expect(401);
-    });
+    const publicRoom = body.find((room) => room.name === 'Public Active Room');
+    expect(publicRoom).toBeDefined();
+    expect(publicRoom?.memberCount).toBe(2);
   });
 });

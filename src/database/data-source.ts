@@ -78,8 +78,7 @@ function buildConnectionOptions(): Pick<DataSourceOptions, 'type'> &
  * Supports both DATABASE_URL (CI / managed hosting) and discrete DB_*
  * variables (local development). See {@link buildConnectionOptions}.
  *
- * @see Sprint 1 Planning — B-A01-T1 (initial migration)
- * @competency C2.2.3 — Reproducible, environment-agnostic schema deployments
+ * @competency Reproducible, environment-agnostic schema deployments
  */
 const AppDataSource = new DataSource({
   ...buildConnectionOptions(),

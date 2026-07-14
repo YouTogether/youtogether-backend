@@ -75,4 +75,42 @@ export class RoomRepositoryImpl implements IRoomRepository {
 
     return room?.ownerId ?? null;
   }
+
+  /**
+   * Returns every active, public room with its active member count.
+   *
+   * Joins `rooms` against `room_memberships` restricted to active
+   * memberships (`left_at IS NULL`), grouping by room to compute the
+   * count. `RoomMembershipOrmEntity` is joined directly (an "entity
+   * join") rather than through a TypeORM relation, since neither entity
+   * declares `@OneToMany`/`@ManyToOne` decorators — consistent with the
+   * rest of this bounded context, which models associations purely
+   * through foreign-key columns.
+   *
+   * `deletedAt IS NULL` is added explicitly: unlike `Repository.find()`,
+   * TypeORM's `QueryBuilder` does not automatically exclude soft-deleted
+   * rows for `@DeleteDateColumn` entities.
+   *
+   * @returns Public, active rooms ordered most recently created first.
+   */
+  async getPublicRooms(): Promise<RoomEntity[]> {
+    const { entities, raw } = await this.dataSource
+      .getRepository(RoomOrmEntity)
+      .createQueryBuilder('room')
+      .leftJoin(
+        RoomMembershipOrmEntity,
+        'membership',
+        'membership.roomId = room.id AND membership.leftAt IS NULL',
+      )
+      .addSelect('COUNT(membership.id)', 'memberCount')
+      .where('room.isPublic = :isPublic', { isPublic: true })
+      .andWhere('room.deletedAt IS NULL')
+      .groupBy('room.id')
+      .orderBy('room.createdAt', 'DESC')
+      .getRawAndEntities<{ memberCount: string }>();
+
+    return entities.map((room, index) =>
+      RoomMapper.toDomain(room, parseInt(raw[index].memberCount, 10)),
+    );
+  }
 }
