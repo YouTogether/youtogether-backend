@@ -19,6 +19,7 @@ import { RoomMembershipOrmEntity } from '../../../../src/room/data/entities/room
 import { RoomRepositoryImpl } from '../../../../src/room/data/repositories/room-repository.impl';
 import { IRoomRepository } from '../../../../src/room/domain/repositories/room-repository.interface';
 import { CreateRoomUseCase } from '../../../../src/room/domain/usecases/create-room.usecase';
+import { GetPublicRoomsUseCase } from '../../../../src/room/domain/usecases/get-public-rooms.usecase';
 import { RoomController } from '../../../../src/room/presentation/controllers/room.controller';
 
 /**
@@ -133,6 +134,7 @@ describe('POST /rooms (integration)', () => {
       controllers: [RoomController],
       providers: [
         CreateRoomUseCase,
+        GetPublicRoomsUseCase,
         JwtStrategy,
         { provide: IRoomRepository, useClass: RoomRepositoryImpl },
       ],
