@@ -5,6 +5,7 @@ import { DataSource } from 'typeorm';
 import { IRoomRepository } from '../../domain/repositories/room-repository.interface';
 import { CreateRoomParams } from '../../domain/usecases/create-room.params';
 import { RoomEntity } from '../../domain/entities/room.entity';
+import { RoomNotFoundFailure } from '../../domain/failures/room.failure';
 import { RoomMapper } from '../mappers/room.mapper';
 import { RoomOrmEntity } from '../entities/room.orm-entity';
 import { RoomMembershipOrmEntity } from '../entities/room-membership.orm-entity';
@@ -112,5 +113,42 @@ export class RoomRepositoryImpl implements IRoomRepository {
     return entities.map((room, index) =>
       RoomMapper.toDomain(room, parseInt(raw[index].memberCount, 10)),
     );
+  }
+
+  /**
+   * Retrieves a single active, public-or-private room by id, with its
+   * current active member count.
+   *
+   * No `isPublic` filter is applied here (unlike {@link getPublicRooms}):
+   * this method backs the room detail endpoint, which — per this task's
+   * Definition of Done — only distinguishes "exists and active" (200)
+   * from "missing or soft-deleted" (404). Restricting private-room detail
+   * access to members only is not a stated requirement at this stage and
+   * is left as a follow-up if a future task introduces that constraint.
+   *
+   * @param roomId - The room's id.
+   * @returns The requested {@link RoomEntity}.
+   * @throws {@link RoomNotFoundFailure} if no active room exists with this id.
+   */
+  async getById(roomId: string): Promise<RoomEntity> {
+    const { entities, raw } = await this.dataSource
+      .getRepository(RoomOrmEntity)
+      .createQueryBuilder('room')
+      .leftJoin(
+        RoomMembershipOrmEntity,
+        'membership',
+        'membership.roomId = room.id AND membership.leftAt IS NULL',
+      )
+      .addSelect('COUNT(membership.id)', 'memberCount')
+      .where('room.id = :roomId', { roomId })
+      .andWhere('room.deletedAt IS NULL')
+      .groupBy('room.id')
+      .getRawAndEntities<{ memberCount: string }>();
+
+    if (entities.length === 0) {
+      throw new RoomNotFoundFailure(roomId);
+    }
+
+    return RoomMapper.toDomain(entities[0], parseInt(raw[0].memberCount, 10));
   }
 }
