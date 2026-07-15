@@ -10,8 +10,11 @@ import { RoomEntity } from '../entities/room.entity';
  * dependency injection to use it as a provider token, mirroring
  * `IAuthRepository`.
  *
- * Grows incrementally, one method per task — `create()` is the only
- * method required.
+ * Grows incrementally, one method per task — `create()`,
+ * `findOwnerId()`, `getPublicRooms()`, and
+ * `getById()` are implemented so far. Subsequent
+ * tasks will add `update()`, `delete()`,
+ * `join()`, and `leave()`.
  *
  * @see RoomRepositoryImpl — data layer implementation
  * @see CreateRoomUseCase — primary consumer of this port
@@ -47,4 +50,25 @@ export abstract class IRoomRepository {
    *   created first. Empty array if no public rooms exist.
    */
   abstract getPublicRooms(): Promise<RoomEntity[]>;
+
+  /**
+   * Retrieves a single active (non-deleted) room by id, with its current
+   * active member count.
+   *
+   * Unlike {@link findOwnerId}, this returns the full aggregate rather
+   * than just the owner id — it backs the `GET /rooms/:id` detail
+   * endpoint, not the ownership guard.
+   *
+   * Does **not** yet include the room's current video session: the
+   * `video_sessions` table is introduced later, in
+   * Video Synchronisation bounded context.
+   * Extending this method's
+   * return shape at that point is an explicit, tracked follow-up rather
+   * than an oversight here.
+   *
+   * @param roomId - The room's id.
+   * @returns The requested {@link RoomEntity}.
+   * @throws {@link RoomNotFoundFailure} if no active room exists with this id.
+   */
+  abstract getById(roomId: string): Promise<RoomEntity>;
 }

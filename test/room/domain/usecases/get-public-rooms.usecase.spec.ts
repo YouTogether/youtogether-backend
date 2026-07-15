@@ -18,6 +18,7 @@ describe('GetPublicRoomsUseCase', () => {
   const getPublicRoomsMock = jest.fn<Promise<RoomEntity[]>, []>();
   const createMock = jest.fn();
   const findOwnerIdMock = jest.fn();
+  const getByIdMock = jest.fn<Promise<RoomEntity>, [string]>();
 
   const MOCK_ROOMS = [
     new RoomEntity({
@@ -46,10 +47,12 @@ describe('GetPublicRoomsUseCase', () => {
     getPublicRoomsMock.mockReset();
     createMock.mockReset();
     findOwnerIdMock.mockReset();
+    getByIdMock.mockReset();
     const roomRepository: IRoomRepository = {
       create: createMock,
       findOwnerId: findOwnerIdMock,
       getPublicRooms: getPublicRoomsMock,
+      getById: getByIdMock,
     };
     getPublicRoomsUseCase = new GetPublicRoomsUseCase(roomRepository);
   });
