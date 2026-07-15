@@ -4,18 +4,23 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Param,
   Post,
+  UseFilters,
   UseGuards,
 } from '@nestjs/common';
 
 import { CreateRoomUseCase } from '../../domain/usecases/create-room.usecase';
 import { CreateRoomParams } from '../../domain/usecases/create-room.params';
 import { GetPublicRoomsUseCase } from '../../domain/usecases/get-public-rooms.usecase';
+import { GetRoomByIdUseCase } from '../../domain/usecases/get-room-by-id.usecase';
+import { GetRoomByIdParams } from '../../domain/usecases/get-room-by-id.params';
 import { CreateRoomDto } from '../dtos/create-room.dto';
 import { RoomResponseDto } from '../dtos/room-response.dto';
 import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../../../auth/presentation/interfaces/authenticated-user.interface';
+import { RoomExceptionFilter } from '../filters/room-exception.filter';
 
 /**
  * Controller for the Room bounded context.
@@ -34,12 +39,16 @@ import { AuthenticatedUser } from '../../../auth/presentation/interfaces/authent
  *
  * @see CreateRoomUseCase
  * @see GetPublicRoomsUseCase
+ * @see GetRoomByIdUseCase
+ * @see RoomExceptionFilter
  */
 @Controller('rooms')
+@UseFilters(RoomExceptionFilter)
 export class RoomController {
   constructor(
     private readonly createRoomUseCase: CreateRoomUseCase,
     private readonly getPublicRoomsUseCase: GetPublicRoomsUseCase,
+    private readonly getRoomByIdUseCase: GetRoomByIdUseCase,
   ) {}
 
   /**
@@ -93,5 +102,32 @@ export class RoomController {
     const rooms = await this.getPublicRoomsUseCase.execute();
 
     return rooms.map((room) => RoomResponseDto.fromRoomEntity(room));
+  }
+
+  /**
+   * GET /rooms/:id
+   *
+   * Returns a single room's details, annotated with its current active
+   * member count. No authentication required — a room's page (or a
+   * guest preview before joining) does not require a session.
+   *
+   * Does not yet include the room's current video session: the
+   * `video_sessions` table is introduced in Video Synchronisation
+   * bounded context. This response shape will be extended at that point
+   * rather than stubbed out prematurely here.
+   *
+   * HTTP status codes:
+   * - 200 OK          — room found.
+   * - 404 Not Found   — the room does not exist or is soft-deleted
+   *   ({@link RoomNotFoundFailure}, mapped by {@link RoomExceptionFilter}).
+   */
+  @Get(':id')
+  @HttpCode(HttpStatus.OK)
+  async findOne(@Param('id') id: string): Promise<RoomResponseDto> {
+    const room = await this.getRoomByIdUseCase.execute(
+      new GetRoomByIdParams({ roomId: id }),
+    );
+
+    return RoomResponseDto.fromRoomEntity(room);
   }
 }

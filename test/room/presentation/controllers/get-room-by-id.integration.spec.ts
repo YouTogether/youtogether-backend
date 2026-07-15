@@ -6,7 +6,6 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getDataSourceToken, TypeOrmModule } from '@nestjs/typeorm';
-import { sign } from 'jsonwebtoken';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
 
@@ -24,18 +23,17 @@ import { GetRoomByIdUseCase } from '../../../../src/room/domain/usecases/get-roo
 import { RoomController } from '../../../../src/room/presentation/controllers/room.controller';
 
 /**
- * Integration tests for POST /rooms.
- *
- * Boots a minimal NestJS application with a real PostgreSQL test database,
- * seeding a real `users` row (required by the `rooms.owner_id` foreign
- * key) and signing a JWT directly rather than exercising the full
- * register/login flow, mirroring `me.integration.spec.ts`.
+ * Integration tests for GET /rooms/:id.
  *
  * Scenarios covered:
- * - 201 Created: valid payload, room persisted, owner auto-joined as a member.
- * - 201 Created: is_public defaults to true when omitted.
- * - 400 Bad Request: missing name, name exceeding 100 characters.
- * - 401 Unauthorized: no Authorization header.
+ * - 200 OK for an existing, active room, with an accurate member count.
+ * - 404 Not Found for a non-existent room id.
+ * - 404 Not Found for a soft-deleted room.
+ *
+ * No `currentVideoSession` field is asserted here: the `video_sessions`
+ * table does not exist yet (it is introduced in Sprint 3, B-V01-T1 —
+ * see the response documented in this task's delivery notes). This
+ * endpoint deliberately returns room + member count only for now.
  *
  * @competency Integration test harness.
  * @competency Test scenarios and expected results.
@@ -44,29 +42,24 @@ const TEST_JWT_SECRET =
   process.env.JWT_SECRET ??
   'e675b2f9affdf3609e857294d44289bf4550c658e214dfab162d9f227e087e507b099101d302aeb480003e94527048dd';
 
-interface RoomSuccessBody {
+interface RoomDetailBody {
   id: string;
   name: string;
-  description: string | null;
-  ownerId: string;
-  isPublic: boolean;
   memberCount: number;
-  createdAt: string;
-  updatedAt: string;
 }
 
 interface ErrorBody {
   statusCode: number;
-  message: string | string[];
-  error: string;
+  message: string;
 }
 
-describe('POST /rooms (integration)', () => {
+describe('GET /rooms/:id (integration)', () => {
   let app: INestApplication;
   let httpServer: Server;
   let dataSource: DataSource;
   let ownerId: string;
-  let accessToken: string;
+  let activeRoomId: string;
+  let deletedRoomId: string;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -109,10 +102,6 @@ describe('POST /rooms (integration)', () => {
                 CreateUsersTable1714000000000,
                 CreateRoomsTable1784015715536,
               ],
-              // Idempotent migrations (CREATE TABLE IF NOT EXISTS): safe to
-              // run alongside other *.integration.spec.ts files sharing the
-              // same physical test database. See create-users-table spec
-              // for the full rationale.
               migrationsRun: true,
               synchronize: false,
               logging: ['error' as const],
@@ -151,18 +140,35 @@ describe('POST /rooms (integration)', () => {
     httpServer = app.getHttpServer() as Server;
     dataSource = module.get<DataSource>(getDataSourceToken());
 
-    // Seed a real user row directly (bypasses the Authentication bounded
-    // context entirely — this suite tests Room, not Auth) to satisfy the
-    // rooms.owner_id foreign key.
     const rawUser: unknown = await dataSource.query(`
         INSERT INTO "users" (email, password_hash, username)
-        VALUES ('room-creator@integration-test.com', '$2b$12$fakehashvalue', 'room_creator') RETURNING id;
+        VALUES ('detail-owner@integration-test.com', '$2b$12$fakehashvalue', 'detail_owner') RETURNING id;
     `);
     ownerId = (rawUser as { id: string }[])[0].id;
 
-    accessToken = sign({ sub: ownerId, role: 'registered' }, TEST_JWT_SECRET, {
-      expiresIn: '15m',
-    });
+    const rawMember: unknown = await dataSource.query(`
+        INSERT INTO "users" (email, password_hash, username)
+        VALUES ('detail-member@integration-test.com', '$2b$12$fakehashvalue', 'detail_member') RETURNING id;
+    `);
+    const memberId = (rawMember as { id: string }[])[0].id;
+
+    const rawActiveRoom: unknown = await dataSource.query(`
+        INSERT INTO "rooms" (name, owner_id, is_public)
+        VALUES ('Detail Active Room', '${ownerId}', true) RETURNING id;
+    `);
+    activeRoomId = (rawActiveRoom as { id: string }[])[0].id;
+
+    await dataSource.query(`
+        INSERT INTO "room_memberships" (room_id, user_id)
+        VALUES ('${activeRoomId}', '${ownerId}'),
+               ('${activeRoomId}', '${memberId}');
+    `);
+
+    const rawDeletedRoom: unknown = await dataSource.query(`
+        INSERT INTO "rooms" (name, owner_id, is_public, deleted_at)
+        VALUES ('Detail Deleted Room', '${ownerId}', true, now()) RETURNING id;
+    `);
+    deletedRoomId = (rawDeletedRoom as { id: string }[])[0].id;
   });
 
   afterAll(async () => {
@@ -175,92 +181,47 @@ describe('POST /rooms (integration)', () => {
     await dataSource.query(`DELETE
                             FROM "rooms"
                             WHERE owner_id = '${ownerId}';`);
-    await dataSource.query(
-      `DELETE
-       FROM "users"
-       WHERE email = 'room-creator@integration-test.com';`,
-    );
+    await dataSource.query(`
+        DELETE
+        FROM "users"
+        WHERE email IN (
+                        'detail-owner@integration-test.com',
+                        'detail-member@integration-test.com'
+            );
+    `);
     await app.close();
   });
 
-  // ─── 201 Created ──────────────────────────────────────────────────
-
-  describe('201 Created', () => {
-    it('should create a room and auto-join the owner as a member (R-CRE-01)', async () => {
+  describe('200 OK', () => {
+    it('should return the room detail with an accurate member count (R-DET-01)', async () => {
       const response = await request(httpServer)
-        .post('/rooms')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ name: 'Friday Movie Night', description: 'Weekly watch party' })
-        .expect(201);
+        .get(`/rooms/${activeRoomId}`)
+        .expect(200);
 
-      const body = response.body as RoomSuccessBody;
-
-      expect(body.name).toBe('Friday Movie Night');
-      expect(body.description).toBe('Weekly watch party');
-      expect(body.ownerId).toBe(ownerId);
-      expect(body.isPublic).toBe(true);
-      expect(body.memberCount).toBe(1);
-      expect(body.id).toMatch(
-        /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
-      );
-
-      const rawMembership: unknown = await dataSource.query(`
-          SELECT room_id, user_id, left_at
-          FROM "room_memberships"
-          WHERE room_id = '${body.id}'
-            AND user_id = '${ownerId}';
-      `);
-      const memberships = rawMembership as { left_at: Date | null }[];
-      expect(memberships).toHaveLength(1);
-      expect(memberships[0].left_at).toBeNull();
-    });
-
-    it('should default is_public to true when omitted (R-CRE-05)', async () => {
-      const response = await request(httpServer)
-        .post('/rooms')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ name: 'Default Visibility Room' })
-        .expect(201);
-
-      const body = response.body as RoomSuccessBody;
-      expect(body.isPublic).toBe(true);
+      const body = response.body as RoomDetailBody;
+      expect(body.id).toBe(activeRoomId);
+      expect(body.name).toBe('Detail Active Room');
+      expect(body.memberCount).toBe(2);
     });
   });
 
-  // ─── 400 Bad Request ──────────────────────────────────────────────
-
-  describe('400 Bad Request', () => {
-    it('should reject a missing name (R-CRE-03)', async () => {
+  describe('404 Not Found', () => {
+    it('should return 404 for a non-existent room id (R-DET-02)', async () => {
       const response = await request(httpServer)
-        .post('/rooms')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ description: 'no name here' })
-        .expect(400);
+        .get('/rooms/00000000-0000-4000-8000-000000000000')
+        .expect(404);
 
       const body = response.body as ErrorBody;
-      expect(body.statusCode).toBe(400);
+      expect(body.statusCode).toBe(404);
     });
 
-    it('should reject a name exceeding 100 characters (R-CRE-04)', async () => {
+    it('should return 404 for a soft-deleted room (R-DET-03)', async () => {
       const response = await request(httpServer)
-        .post('/rooms')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ name: 'a'.repeat(101) })
-        .expect(400);
+        .get(`/rooms/${deletedRoomId}`)
+        .expect(404);
 
       const body = response.body as ErrorBody;
-      expect(body.statusCode).toBe(400);
-    });
-  });
-
-  // ─── 401 Unauthorized ─────────────────────────────────────────────
-
-  describe('401 Unauthorized', () => {
-    it('should reject a request with no Authorization header (R-CRE-06)', async () => {
-      await request(httpServer)
-        .post('/rooms')
-        .send({ name: 'Unauthenticated Room' })
-        .expect(401);
+      expect(body.statusCode).toBe(404);
     });
   });
 });

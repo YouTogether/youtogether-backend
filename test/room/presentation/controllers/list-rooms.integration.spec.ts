@@ -19,22 +19,23 @@ import { RoomRepositoryImpl } from '../../../../src/room/data/repositories/room-
 import { IRoomRepository } from '../../../../src/room/domain/repositories/room-repository.interface';
 import { CreateRoomUseCase } from '../../../../src/room/domain/usecases/create-room.usecase';
 import { GetPublicRoomsUseCase } from '../../../../src/room/domain/usecases/get-public-rooms.usecase';
+import { GetRoomByIdUseCase } from '../../../../src/room/domain/usecases/get-room-by-id.usecase';
 import { RoomController } from '../../../../src/room/presentation/controllers/room.controller';
 
 /**
- * Integration tests for GET /rooms (B-R02-T1).
+ * Integration tests for GET /rooms.
  *
  * Seeds a mix of public/private and active/soft-deleted rooms, with
  * memberships in both active and left states, then verifies the listing
  * query filters and computes member counts correctly.
  *
- * Scenarios covered (see cahier de recette §3, R-LST-01 through R-LST-07):
+ * Scenarios covered:
  * - 200 OK, no Authorization header required.
  * - Only public, non-deleted rooms returned.
  * - Active member count excludes memberships with left_at set.
  *
- * @competency C2.2.2 — Integration test harness.
- * @competency C2.3.1 — Test scenarios and expected results (cahier de recette).
+ * @competency Integration test harness.
+ * @competency Test scenarios and expected results (cahier de recette).
  */
 const TEST_JWT_SECRET =
   process.env.JWT_SECRET ??
@@ -117,6 +118,7 @@ describe('GET /rooms (integration)', () => {
       providers: [
         CreateRoomUseCase,
         GetPublicRoomsUseCase,
+        GetRoomByIdUseCase,
         JwtStrategy,
         { provide: IRoomRepository, useClass: RoomRepositoryImpl },
       ],
