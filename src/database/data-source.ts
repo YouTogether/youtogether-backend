@@ -3,7 +3,7 @@ import { DataSource, DataSourceOptions } from 'typeorm';
 
 import { UserOrmEntity } from '../auth/data/entities/user.orm-entity';
 import { CreateUsersTable1714000000000 } from './migrations/1714000000000-CreateUsersTable';
-import { CreateRoomTable1784015715536 } from './migrations/1784015715536-CreateRoomsTable';
+import { CreateRoomsTable1784015715536 } from './migrations/1784015715536-CreateRoomsTable';
 
 /**
  * Reads a required environment variable, throwing a descriptive error if it
@@ -84,7 +84,7 @@ function buildConnectionOptions(): Pick<DataSourceOptions, 'type'> &
 const AppDataSource = new DataSource({
   ...buildConnectionOptions(),
   entities: [UserOrmEntity],
-  migrations: [CreateUsersTable1714000000000, CreateRoomTable1784015715536],
+  migrations: [CreateUsersTable1714000000000, CreateRoomsTable1784015715536],
   synchronize: false,
   logging: false,
 } as DataSourceOptions);
