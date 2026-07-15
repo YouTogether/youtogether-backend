@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.0](https://github.com/YouTogether/youtogether-backend/compare/v0.5.0...v0.6.0) (2026-07-15)
+
+
+### Features
+
+* **room:** [B-R03-T1] GET /rooms/:id endpoint ([#46](https://github.com/YouTogether/youtogether-backend/issues/46)) ([b473598](https://github.com/YouTogether/youtogether-backend/commit/b47359824987bd1582c3a53168e47710d390c4fc))
+
 ## [0.5.0](https://github.com/YouTogether/youtogether-backend/compare/v0.4.0...v0.5.0) (2026-07-14)
 
 
