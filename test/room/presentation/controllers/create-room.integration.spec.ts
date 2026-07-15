@@ -20,6 +20,7 @@ import { RoomRepositoryImpl } from '../../../../src/room/data/repositories/room-
 import { IRoomRepository } from '../../../../src/room/domain/repositories/room-repository.interface';
 import { CreateRoomUseCase } from '../../../../src/room/domain/usecases/create-room.usecase';
 import { GetPublicRoomsUseCase } from '../../../../src/room/domain/usecases/get-public-rooms.usecase';
+import { GetRoomByIdUseCase } from '../../../../src/room/domain/usecases/get-room-by-id.usecase';
 import { RoomController } from '../../../../src/room/presentation/controllers/room.controller';
 
 /**
@@ -135,6 +136,7 @@ describe('POST /rooms (integration)', () => {
       providers: [
         CreateRoomUseCase,
         GetPublicRoomsUseCase,
+        GetRoomByIdUseCase,
         JwtStrategy,
         { provide: IRoomRepository, useClass: RoomRepositoryImpl },
       ],
