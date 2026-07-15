@@ -4,6 +4,9 @@ import { RoomController } from '../../../../src/room/presentation/controllers/ro
 import { CreateRoomUseCase } from '../../../../src/room/domain/usecases/create-room.usecase';
 import { CreateRoomParams } from '../../../../src/room/domain/usecases/create-room.params';
 import { GetPublicRoomsUseCase } from '../../../../src/room/domain/usecases/get-public-rooms.usecase';
+import { GetRoomByIdUseCase } from '../../../../src/room/domain/usecases/get-room-by-id.usecase';
+import { GetRoomByIdParams } from '../../../../src/room/domain/usecases/get-room-by-id.params';
+import { RoomNotFoundFailure } from '../../../../src/room/domain/failures/room.failure';
 import { CreateRoomDto } from '../../../../src/room/presentation/dtos/create-room.dto';
 import { RoomResponseDto } from '../../../../src/room/presentation/dtos/room-response.dto';
 import { RoomEntity } from '../../../../src/room/domain/entities/room.entity';
@@ -13,18 +16,19 @@ import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 /**
  * Unit tests for RoomController.
  *
- * CreateRoomUseCase is mocked. Tests verify:
+ * CreateRoomUseCase and GetPublicRoomsUseCase are mocked. Tests verify:
  *   - The DTO and the authenticated user are correctly mapped to CreateRoomParams.
- *   - The response is correctly shaped as a RoomResponseDto.
+ *   - The response is correctly shaped as RoomResponseDto / RoomResponseDto[].
  *   - The owner id is taken exclusively from the validated AuthenticatedUser
  *     (via @CurrentUser), never from client-supplied input.
  *
  * JwtAuthGuard itself is NOT exercised here (unit test calling the
  * controller method directly) — guard rejection (401) is verified by
  * create-room.integration.spec.ts against a fully bootstrapped application.
+ * findAll() requires no guard at all (public listing).
  *
  * @competency Unit test harness, TDD.
- * @competency Test scenarios R-CRE-01, R-CRE-05 (delegation, auth boundary).
+ * @competency Test scenarios R-CRE-01, R-CRE-05, R-LST-01, R-LST-06.
  */
 describe('RoomController', () => {
   let roomController: RoomController;
@@ -34,6 +38,8 @@ describe('RoomController', () => {
   const getPublicRoomsExecute: jest.MockedFunction<
     GetPublicRoomsUseCase['execute']
   > = jest.fn();
+  const getRoomByIdExecute: jest.MockedFunction<GetRoomByIdUseCase['execute']> =
+    jest.fn();
 
   const AUTHENTICATED_USER: AuthenticatedUser = {
     userId: '550e8400-e29b-41d4-a716-446655440000',
@@ -60,6 +66,7 @@ describe('RoomController', () => {
   beforeEach(async () => {
     createExecute.mockReset();
     getPublicRoomsExecute.mockReset();
+    getRoomByIdExecute.mockReset();
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RoomController],
@@ -68,6 +75,10 @@ describe('RoomController', () => {
         {
           provide: GetPublicRoomsUseCase,
           useValue: { execute: getPublicRoomsExecute },
+        },
+        {
+          provide: GetRoomByIdUseCase,
+          useValue: { execute: getRoomByIdExecute },
         },
       ],
     }).compile();
@@ -208,6 +219,50 @@ describe('RoomController', () => {
       );
 
       await expect(roomController.findAll()).rejects.toThrow(
+        'Database unavailable',
+      );
+    });
+  });
+
+  // --- GET /rooms/:id (B-R03-T1) ---
+
+  describe('findOne()', () => {
+    it('should return a RoomResponseDto on success', async () => {
+      getRoomByIdExecute.mockResolvedValue(MOCK_ROOM);
+
+      const response = await roomController.findOne(MOCK_ROOM.id);
+
+      expect(response).toBeInstanceOf(RoomResponseDto);
+      expect(response.id).toBe(MOCK_ROOM.id);
+      expect(response.memberCount).toBe(MOCK_ROOM.memberCount);
+    });
+
+    it('should call GetRoomByIdUseCase.execute with params built from the route parameter', async () => {
+      getRoomByIdExecute.mockResolvedValue(MOCK_ROOM);
+
+      await roomController.findOne(MOCK_ROOM.id);
+
+      expect(getRoomByIdExecute).toHaveBeenCalledWith(
+        expect.objectContaining<Partial<GetRoomByIdParams>>({
+          roomId: MOCK_ROOM.id,
+        }),
+      );
+    });
+
+    it('should propagate RoomNotFoundFailure (RoomExceptionFilter maps it to 404) (R-DET-02/03)', async () => {
+      getRoomByIdExecute.mockRejectedValue(
+        new RoomNotFoundFailure('unknown-id'),
+      );
+
+      await expect(roomController.findOne('unknown-id')).rejects.toThrow(
+        RoomNotFoundFailure,
+      );
+    });
+
+    it('should not swallow unexpected errors', async () => {
+      getRoomByIdExecute.mockRejectedValue(new Error('Database unavailable'));
+
+      await expect(roomController.findOne(MOCK_ROOM.id)).rejects.toThrow(
         'Database unavailable',
       );
     });
