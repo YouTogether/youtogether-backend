@@ -9,6 +9,8 @@ import { GetRoomByIdParams } from '../../../../src/room/domain/usecases/get-room
 import { UpdateRoomUseCase } from '../../../../src/room/domain/usecases/update-room.usecase';
 import { UpdateRoomParams } from '../../../../src/room/domain/usecases/update-room.params';
 import { UpdateRoomDto } from '../../../../src/room/presentation/dtos/update-room.dto';
+import { DeleteRoomUseCase } from '../../../../src/room/domain/usecases/delete-room.usecase';
+import { DeleteRoomParams } from '../../../../src/room/domain/usecases/delete-room.params';
 import { IRoomRepository } from '../../../../src/room/domain/repositories/room-repository.interface';
 import { RoomNotFoundFailure } from '../../../../src/room/domain/failures/room.failure';
 import { CreateRoomDto } from '../../../../src/room/presentation/dtos/create-room.dto';
@@ -18,19 +20,30 @@ import { AuthenticatedUser } from '../../../../src/auth/presentation/interfaces/
 import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 
 /**
- * Unit tests for RoomController (create(), findAll() —
- * presentation layer).
+ * Unit tests for RoomController (create(), findAll(), findOne(), update()
+ * — presentation layer).
  *
- * CreateRoomUseCase and GetPublicRoomsUseCase are mocked. Tests verify:
- *   - The DTO and the authenticated user are correctly mapped to CreateRoomParams.
+ * All four use cases are mocked. Tests verify:
+ *   - The DTO and the authenticated user are correctly mapped to the
+ *     corresponding domain params.
  *   - The response is correctly shaped as RoomResponseDto / RoomResponseDto[].
  *   - The owner id is taken exclusively from the validated AuthenticatedUser
  *     (via @CurrentUser), never from client-supplied input.
  *
- * JwtAuthGuard itself is NOT exercised here (unit test calling the
- * controller method directly) — guard rejection (401) is verified by
- * create-room.integration.spec.ts against a fully bootstrapped application.
- * findAll() requires no guard at all (public listing).
+ * Neither JwtAuthGuard nor OwnershipGuard is exercised here (this is a
+ * unit test calling controller methods directly) — guard rejection
+ * (401/403/404) is verified by the corresponding `*.integration.spec.ts`
+ * suites against a fully bootstrapped application.
+ *
+ * `IRoomRepository` is nonetheless provided (as an unused stub) because
+ * `update()` is decorated with `@UseGuards(JwtAuthGuard, OwnershipGuard)`:
+ * Nest resolves every guard referenced by class in that decorator when
+ * compiling the TestingModule, regardless of whether the guard's
+ * `canActivate()` is ever invoked in a given test — and `OwnershipGuard`
+ * has a constructor dependency on `IRoomRepository`. Without this stub,
+ * `Test.createTestingModule(...).compile()` throws
+ * `UnknownDependenciesException` for every test in this file, not just
+ * the ones exercising `update()`.
  *
  * @competency Unit test harness, TDD.
  * @competency Test scenarios R-CRE-01, R-CRE-05, R-LST-01, R-LST-06,
@@ -48,6 +61,8 @@ describe('RoomController', () => {
     jest.fn();
   const updateRoomExecute: jest.MockedFunction<UpdateRoomUseCase['execute']> =
     jest.fn();
+  const deleteRoomExecute: jest.MockedFunction<DeleteRoomUseCase['execute']> =
+    jest.fn();
 
   const roomRepositoryStub: IRoomRepository = {
     create: jest.fn(),
@@ -55,6 +70,7 @@ describe('RoomController', () => {
     getPublicRooms: jest.fn(),
     getById: jest.fn(),
     update: jest.fn(),
+    delete: jest.fn(),
   };
 
   const AUTHENTICATED_USER: AuthenticatedUser = {
@@ -84,6 +100,7 @@ describe('RoomController', () => {
     getPublicRoomsExecute.mockReset();
     getRoomByIdExecute.mockReset();
     updateRoomExecute.mockReset();
+    deleteRoomExecute.mockReset();
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RoomController],
@@ -100,6 +117,10 @@ describe('RoomController', () => {
         {
           provide: UpdateRoomUseCase,
           useValue: { execute: updateRoomExecute },
+        },
+        {
+          provide: DeleteRoomUseCase,
+          useValue: { execute: deleteRoomExecute },
         },
         { provide: IRoomRepository, useValue: roomRepositoryStub },
       ],
@@ -362,6 +383,49 @@ describe('RoomController', () => {
       await expect(
         roomController.update(MOCK_ROOM.id, VALID_UPDATE_DTO),
       ).rejects.toThrow('Database unavailable');
+    });
+  });
+
+  // --- DELETE /rooms/:id (B-R05-T1) ---
+
+  describe('remove()', () => {
+    it('should resolve with no value on success (R-DEL-01)', async () => {
+      deleteRoomExecute.mockResolvedValue(undefined);
+
+      await expect(
+        roomController.remove(MOCK_ROOM.id),
+      ).resolves.toBeUndefined();
+    });
+
+    it('should call DeleteRoomUseCase.execute with params built from the route parameter', async () => {
+      deleteRoomExecute.mockResolvedValue(undefined);
+
+      await roomController.remove(MOCK_ROOM.id);
+
+      expect(deleteRoomExecute).toHaveBeenCalledWith(
+        expect.objectContaining<Partial<DeleteRoomParams>>({
+          roomId: MOCK_ROOM.id,
+        }),
+      );
+      expect(deleteRoomExecute).toHaveBeenCalledTimes(1);
+    });
+
+    it('should propagate RoomNotFoundFailure (RoomExceptionFilter maps it to 404) (R-DEL-05)', async () => {
+      deleteRoomExecute.mockRejectedValue(
+        new RoomNotFoundFailure('unknown-id'),
+      );
+
+      await expect(roomController.remove('unknown-id')).rejects.toThrow(
+        RoomNotFoundFailure,
+      );
+    });
+
+    it('should not swallow unexpected errors', async () => {
+      deleteRoomExecute.mockRejectedValue(new Error('Database unavailable'));
+
+      await expect(roomController.remove(MOCK_ROOM.id)).rejects.toThrow(
+        'Database unavailable',
+      );
     });
   });
 });
