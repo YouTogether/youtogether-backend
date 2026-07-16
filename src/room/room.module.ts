@@ -9,6 +9,7 @@ import { IRoomRepository } from './domain/repositories/room-repository.interface
 import { CreateRoomUseCase } from './domain/usecases/create-room.usecase';
 import { GetPublicRoomsUseCase } from './domain/usecases/get-public-rooms.usecase';
 import { GetRoomByIdUseCase } from './domain/usecases/get-room-by-id.usecase';
+import { UpdateRoomUseCase } from './domain/usecases/update-room.usecase';
 import { OwnershipGuard } from './presentation/guards/ownership.guard';
 import { RoomController } from './presentation/controllers/room.controller';
 
@@ -34,6 +35,7 @@ import { RoomController } from './presentation/controllers/room.controller';
     CreateRoomUseCase,
     GetPublicRoomsUseCase,
     GetRoomByIdUseCase,
+    UpdateRoomUseCase,
     OwnershipGuard,
     {
       provide: IRoomRepository,
