@@ -194,4 +194,27 @@ export class RoomRepositoryImpl implements IRoomRepository {
 
     return RoomMapper.toDomain(savedRoom, memberCount);
   }
+
+  /**
+   * Soft-deletes a room via TypeORM's `softDelete`, which sets
+   * `deleted_at` to the current timestamp rather than removing the row —
+   * `room_memberships` rows referencing this room are left untouched,
+   * preserving.
+   *
+   * `softDelete` silently affects zero rows for a non-existent or
+   * already-deleted id rather than throwing; `affected` is checked
+   * explicitly to surface that case as {@link RoomNotFoundFailure}.
+   *
+   * @param roomId - The room's id.
+   * @throws {@link RoomNotFoundFailure} if no active room exists with this id.
+   */
+  async delete(roomId: string): Promise<void> {
+    const result = await this.dataSource
+      .getRepository(RoomOrmEntity)
+      .softDelete(roomId);
+
+    if (result.affected === 0) {
+      throw new RoomNotFoundFailure(roomId);
+    }
+  }
 }
