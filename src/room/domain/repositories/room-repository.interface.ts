@@ -1,4 +1,5 @@
 import { CreateRoomParams } from '../usecases/create-room.params';
+import { UpdateRoomParams } from '../usecases/update-room.params';
 import { RoomEntity } from '../entities/room.entity';
 
 /**
@@ -71,4 +72,20 @@ export abstract class IRoomRepository {
    * @throws {@link RoomNotFoundFailure} if no active room exists with this id.
    */
   abstract getById(roomId: string): Promise<RoomEntity>;
+
+  /**
+   * Updates a room's name and/or description.
+   *
+   * Ownership is not re-checked here: by the time this method is called,
+   * `OwnershipGuard` has already authorized the request at the
+   * presentation layer. This method only re-verifies *existence* (the
+   * room could in principle have been deleted between the guard's check
+   * and this call), which is why it can still throw
+   * {@link RoomNotFoundFailure}.
+   *
+   * @param params - The room id and the fields to update (partial).
+   * @returns The updated {@link RoomEntity}, with a freshly computed member count.
+   * @throws {@link RoomNotFoundFailure} if no active room exists with this id.
+   */
+  abstract update(params: UpdateRoomParams): Promise<RoomEntity>;
 }

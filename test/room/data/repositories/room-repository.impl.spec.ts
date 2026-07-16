@@ -4,6 +4,8 @@ import { RoomRepositoryImpl } from '../../../../src/room/data/repositories/room-
 import { RoomOrmEntity } from '../../../../src/room/data/entities/room.orm-entity';
 import { RoomMembershipOrmEntity } from '../../../../src/room/data/entities/room-membership.orm-entity';
 import { CreateRoomParams } from '../../../../src/room/domain/usecases/create-room.params';
+import { UpdateRoomParams } from '../../../../src/room/domain/usecases/update-room.params';
+import { RoomNotFoundFailure } from '../../../../src/room/domain/failures/room.failure';
 
 /**
  * Targeted unit tests for RoomRepositoryImpl.
@@ -193,6 +195,113 @@ describe('RoomRepositoryImpl (unit)', () => {
       const result = await repository.findOwnerId('unknown-uuid');
 
       expect(result).toBeNull();
+    });
+  });
+
+  describe('update', () => {
+    const EXISTING_ROOM = {
+      id: 'room-uuid',
+      name: 'Friday Movie Night',
+      description: 'Weekly watch party',
+      ownerId: '550e8400-e29b-41d4-a716-446655440000',
+      isPublic: true,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    };
+
+    function mockRoomRepositoryAndMembershipCount(
+      foundRoom: typeof EXISTING_ROOM | null,
+      memberCount = 2,
+    ): {
+      findOneMock: jest.Mock<Promise<typeof EXISTING_ROOM | null>, []>;
+      saveMock: jest.Mock<
+        Promise<typeof EXISTING_ROOM>,
+        [typeof EXISTING_ROOM]
+      >;
+      countMock: jest.Mock<Promise<number>, []>;
+    } {
+      const findOneMock = jest
+        .fn<Promise<typeof EXISTING_ROOM | null>, []>()
+        .mockResolvedValue(foundRoom);
+      const saveMock = jest
+        .fn<Promise<typeof EXISTING_ROOM>, [typeof EXISTING_ROOM]>()
+        .mockImplementation((room) =>
+          Promise.resolve({
+            ...room,
+            updatedAt: new Date('2026-01-05T00:00:00Z'),
+          }),
+        );
+      const countMock = jest
+        .fn<Promise<number>, []>()
+        .mockResolvedValue(memberCount);
+
+      (dataSource.getRepository as jest.Mock).mockImplementation(
+        (entityClass: unknown) => {
+          if (entityClass === RoomMembershipOrmEntity) {
+            return {
+              count: countMock,
+            } as unknown as Repository<RoomMembershipOrmEntity>;
+          }
+          return {
+            findOne: findOneMock,
+            save: saveMock,
+          } as unknown as Repository<RoomOrmEntity>;
+        },
+      );
+
+      return { findOneMock, saveMock, countMock };
+    }
+
+    it('should throw RoomNotFoundFailure when the room does not exist or is soft-deleted (R-UPD-06)', async () => {
+      mockRoomRepositoryAndMembershipCount(null);
+
+      await expect(
+        repository.update(
+          new UpdateRoomParams({ roomId: 'unknown-uuid', name: 'New Name' }),
+        ),
+      ).rejects.toThrow(RoomNotFoundFailure);
+    });
+
+    it('should apply only the provided field when name alone is supplied', async () => {
+      const { saveMock } = mockRoomRepositoryAndMembershipCount({
+        ...EXISTING_ROOM,
+      });
+
+      await repository.update(
+        new UpdateRoomParams({ roomId: 'room-uuid', name: 'Renamed Room' }),
+      );
+
+      const savedRoom = saveMock.mock.calls[0][0];
+      expect(savedRoom.name).toBe('Renamed Room');
+      expect(savedRoom.description).toBe(EXISTING_ROOM.description);
+    });
+
+    it('should apply only the provided field when description alone is supplied (R-UPD-02)', async () => {
+      const { saveMock } = mockRoomRepositoryAndMembershipCount({
+        ...EXISTING_ROOM,
+      });
+
+      await repository.update(
+        new UpdateRoomParams({
+          roomId: 'room-uuid',
+          description: 'New description only',
+        }),
+      );
+
+      const savedRoom = saveMock.mock.calls[0][0];
+      expect(savedRoom.name).toBe(EXISTING_ROOM.name);
+      expect(savedRoom.description).toBe('New description only');
+    });
+
+    it('should return the updated room with the active member count (R-UPD-01)', async () => {
+      mockRoomRepositoryAndMembershipCount({ ...EXISTING_ROOM }, 3);
+
+      const result = await repository.update(
+        new UpdateRoomParams({ roomId: 'room-uuid', name: 'Renamed Room' }),
+      );
+
+      expect(result.name).toBe('Renamed Room');
+      expect(result.memberCount).toBe(3);
     });
   });
 });

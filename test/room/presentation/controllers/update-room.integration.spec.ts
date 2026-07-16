@@ -6,6 +6,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { Test, TestingModule } from '@nestjs/testing';
 import { getDataSourceToken, TypeOrmModule } from '@nestjs/typeorm';
+import { sign } from 'jsonwebtoken';
 import request from 'supertest';
 import { DataSource } from 'typeorm';
 
@@ -20,40 +21,51 @@ import { IRoomRepository } from '../../../../src/room/domain/repositories/room-r
 import { CreateRoomUseCase } from '../../../../src/room/domain/usecases/create-room.usecase';
 import { GetPublicRoomsUseCase } from '../../../../src/room/domain/usecases/get-public-rooms.usecase';
 import { GetRoomByIdUseCase } from '../../../../src/room/domain/usecases/get-room-by-id.usecase';
-import { RoomController } from '../../../../src/room/presentation/controllers/room.controller';
 import { UpdateRoomUseCase } from '../../../../src/room/domain/usecases/update-room.usecase';
+import { OwnershipGuard } from '../../../../src/room/presentation/guards/ownership.guard';
+import { RoomController } from '../../../../src/room/presentation/controllers/room.controller';
 
 /**
- * Integration tests for GET /rooms.
+ * Integration tests for PATCH /rooms/:id.
  *
- * Seeds a mix of public/private and active/soft-deleted rooms, with
- * memberships in both active and left states, then verifies the listing
- * query filters and computes member counts correctly.
+ * Unlike `room.controller.spec.ts`, this suite exercises the real guard
+ * chain (`JwtAuthGuard`, `OwnershipGuard`) against a fully bootstrapped
+ * application, which is the only way to verify ownership enforcement
+ * end-to-end.
  *
- * Scenarios covered:
- * - 200 OK, no Authorization header required.
- * - Only public, non-deleted rooms returned.
- * - Active member count excludes memberships with left_at set.
+ * Scenarios covered (see cahier de recette §5, R-UPD-01 through R-UPD-06):
+ * - 200 OK for the owner, full and partial updates.
+ * - 400 Bad Request for invalid input.
+ * - 403 Forbidden for a non-owner.
+ * - 404 Not Found for a non-existent room.
  *
  * @competency Integration test harness.
- * @competency Test scenarios and expected results (cahier de recette).
+ * @competency Test scenarios and expected results.
  */
 const TEST_JWT_SECRET =
   process.env.JWT_SECRET ??
   'e675b2f9affdf3609e857294d44289bf4550c658e214dfab162d9f227e087e507b099101d302aeb480003e94527048dd';
 
-interface RoomListItemBody {
+interface RoomBody {
   id: string;
   name: string;
-  isPublic: boolean;
-  memberCount: number;
+  description: string | null;
+  updatedAt: string;
 }
 
-describe('GET /rooms (integration)', () => {
+interface ErrorBody {
+  statusCode: number;
+  message: string | string[];
+}
+
+describe('PATCH /rooms/:id (integration)', () => {
   let app: INestApplication;
   let httpServer: Server;
   let dataSource: DataSource;
   let ownerId: string;
+  let nonOwnerId: string;
+  let ownerToken: string;
+  let nonOwnerToken: string;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -121,6 +133,7 @@ describe('GET /rooms (integration)', () => {
         GetPublicRoomsUseCase,
         GetRoomByIdUseCase,
         UpdateRoomUseCase,
+        OwnershipGuard,
         JwtStrategy,
         { provide: IRoomRepository, useClass: RoomRepositoryImpl },
       ],
@@ -135,52 +148,26 @@ describe('GET /rooms (integration)', () => {
     httpServer = app.getHttpServer() as Server;
     dataSource = module.get<DataSource>(getDataSourceToken());
 
-    const rawUser: unknown = await dataSource.query(`
+    const rawOwner: unknown = await dataSource.query(`
         INSERT INTO "users" (email, password_hash, username)
-        VALUES ('listing-owner@integration-test.com', '$2b$12$fakehashvalue', 'listing_owner') RETURNING id;
+        VALUES ('update-owner@integration-test.com', '$2b$12$fakehashvalue', 'update_owner') RETURNING id;
     `);
-    ownerId = (rawUser as { id: string }[])[0].id;
+    ownerId = (rawOwner as { id: string }[])[0].id;
 
-    const rawMember: unknown = await dataSource.query(`
+    const rawNonOwner: unknown = await dataSource.query(`
         INSERT INTO "users" (email, password_hash, username)
-        VALUES ('listing-member@integration-test.com', '$2b$12$fakehashvalue', 'listing_member') RETURNING id;
+        VALUES ('update-non-owner@integration-test.com', '$2b$12$fakehashvalue', 'update_non_owner') RETURNING id;
     `);
-    const memberId = (rawMember as { id: string }[])[0].id;
+    nonOwnerId = (rawNonOwner as { id: string }[])[0].id;
 
-    const rawLeftMember: unknown = await dataSource.query(`
-        INSERT INTO "users" (email, password_hash, username)
-        VALUES ('listing-left-member@integration-test.com', '$2b$12$fakehashvalue', 'listing_left_member') RETURNING id;
-    `);
-    const leftMemberId = (rawLeftMember as { id: string }[])[0].id;
-
-    // Public, active room with 3 active members (owner + 2) and 1 who left.
-    const rawPublicRoom: unknown = await dataSource.query(`
-        INSERT INTO "rooms" (name, owner_id, is_public)
-        VALUES ('Public Active Room', '${ownerId}', true) RETURNING id;
-    `);
-    const publicRoomId = (rawPublicRoom as { id: string }[])[0].id;
-
-    await dataSource.query(`
-        INSERT INTO "room_memberships" (room_id, user_id)
-        VALUES ('${publicRoomId}', '${ownerId}'),
-               ('${publicRoomId}', '${memberId}');
-    `);
-    await dataSource.query(`
-        INSERT INTO "room_memberships" (room_id, user_id, left_at)
-        VALUES ('${publicRoomId}', '${leftMemberId}', now());
-    `);
-
-    // Private room — must be excluded from the listing.
-    await dataSource.query(`
-        INSERT INTO "rooms" (name, owner_id, is_public)
-        VALUES ('Private Room', '${ownerId}', false);
-    `);
-
-    // Public but soft-deleted room — must be excluded from the listing.
-    await dataSource.query(`
-        INSERT INTO "rooms" (name, owner_id, is_public, deleted_at)
-        VALUES ('Deleted Public Room', '${ownerId}', true, now());
-    `);
+    ownerToken = sign({ sub: ownerId, role: 'registered' }, TEST_JWT_SECRET, {
+      expiresIn: '15m',
+    });
+    nonOwnerToken = sign(
+      { sub: nonOwnerId, role: 'registered' },
+      TEST_JWT_SECRET,
+      { expiresIn: '15m' },
+    );
   });
 
   afterAll(async () => {
@@ -197,34 +184,103 @@ describe('GET /rooms (integration)', () => {
         DELETE
         FROM "users"
         WHERE email IN (
-                        'listing-owner@integration-test.com',
-                        'listing-member@integration-test.com',
-                        'listing-left-member@integration-test.com'
+                        'update-owner@integration-test.com',
+                        'update-non-owner@integration-test.com'
             );
     `);
     await app.close();
   });
 
-  it('should return 200 with no Authorization header (R-LST-01)', async () => {
-    await request(httpServer).get('/rooms').expect(200);
+  async function createRoom(name: string): Promise<string> {
+    const response = await request(httpServer)
+      .post('/rooms')
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ name, description: 'Original description' });
+
+    return (response.body as { id: string }).id;
+  }
+
+  describe('200 OK', () => {
+    it('should update name and description for the owner (R-UPD-01)', async () => {
+      const roomId = await createRoom('Room To Rename');
+
+      const response = await request(httpServer)
+        .patch(`/rooms/${roomId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ name: 'Renamed Room', description: 'New description' })
+        .expect(200);
+
+      const body = response.body as RoomBody;
+      expect(body.name).toBe('Renamed Room');
+      expect(body.description).toBe('New description');
+    });
+
+    it('should apply a partial update without touching the other field (R-UPD-02)', async () => {
+      const roomId = await createRoom('Partial Update Room');
+
+      const response = await request(httpServer)
+        .patch(`/rooms/${roomId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ description: 'Only the description changes' })
+        .expect(200);
+
+      const body = response.body as RoomBody;
+      expect(body.name).toBe('Partial Update Room');
+      expect(body.description).toBe('Only the description changes');
+    });
   });
 
-  it('should return only public, non-deleted rooms (R-LST-05)', async () => {
-    const response = await request(httpServer).get('/rooms').expect(200);
-    const body = response.body as RoomListItemBody[];
+  describe('400 Bad Request', () => {
+    it('should reject a name exceeding 100 characters (R-UPD-04)', async () => {
+      const roomId = await createRoom('Room For Validation');
 
-    const names = body.map((room) => room.name);
-    expect(names).toContain('Public Active Room');
-    expect(names).not.toContain('Private Room');
-    expect(names).not.toContain('Deleted Public Room');
+      const response = await request(httpServer)
+        .patch(`/rooms/${roomId}`)
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ name: 'a'.repeat(101) })
+        .expect(400);
+
+      const body = response.body as ErrorBody;
+      expect(body.statusCode).toBe(400);
+    });
   });
 
-  it('should compute the active member count, excluding members who left (R-LST-02)', async () => {
-    const response = await request(httpServer).get('/rooms').expect(200);
-    const body = response.body as RoomListItemBody[];
+  describe('403 Forbidden', () => {
+    it('should reject an update from a non-owner (R-UPD-05)', async () => {
+      const roomId = await createRoom('Room Owned By Someone Else');
 
-    const publicRoom = body.find((room) => room.name === 'Public Active Room');
-    expect(publicRoom).toBeDefined();
-    expect(publicRoom?.memberCount).toBe(2);
+      const response = await request(httpServer)
+        .patch(`/rooms/${roomId}`)
+        .set('Authorization', `Bearer ${nonOwnerToken}`)
+        .send({ name: 'Hijacked Name' })
+        .expect(403);
+
+      const body = response.body as ErrorBody;
+      expect(body.statusCode).toBe(403);
+    });
+  });
+
+  describe('404 Not Found', () => {
+    it('should return 404 for a non-existent room (R-UPD-06)', async () => {
+      const response = await request(httpServer)
+        .patch('/rooms/00000000-0000-4000-8000-000000000000')
+        .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ name: 'Does Not Matter' })
+        .expect(404);
+
+      const body = response.body as ErrorBody;
+      expect(body.statusCode).toBe(404);
+    });
+  });
+
+  describe('401 Unauthorized', () => {
+    it('should reject a request with no Authorization header', async () => {
+      const roomId = await createRoom('Room For Auth Check');
+
+      await request(httpServer)
+        .patch(`/rooms/${roomId}`)
+        .send({ name: 'Should Not Apply' })
+        .expect(401);
+    });
   });
 });

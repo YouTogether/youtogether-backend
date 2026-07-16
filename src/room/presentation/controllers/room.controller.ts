@@ -5,6 +5,7 @@ import {
   HttpCode,
   HttpStatus,
   Param,
+  Patch,
   Post,
   UseFilters,
   UseGuards,
@@ -15,12 +16,16 @@ import { CreateRoomParams } from '../../domain/usecases/create-room.params';
 import { GetPublicRoomsUseCase } from '../../domain/usecases/get-public-rooms.usecase';
 import { GetRoomByIdUseCase } from '../../domain/usecases/get-room-by-id.usecase';
 import { GetRoomByIdParams } from '../../domain/usecases/get-room-by-id.params';
+import { UpdateRoomUseCase } from '../../domain/usecases/update-room.usecase';
+import { UpdateRoomParams } from '../../domain/usecases/update-room.params';
 import { CreateRoomDto } from '../dtos/create-room.dto';
+import { UpdateRoomDto } from '../dtos/update-room.dto';
 import { RoomResponseDto } from '../dtos/room-response.dto';
 import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../../../auth/presentation/interfaces/authenticated-user.interface';
 import { RoomExceptionFilter } from '../filters/room-exception.filter';
+import { OwnershipGuard } from '../guards/ownership.guard';
 
 /**
  * Controller for the Room bounded context.
@@ -30,16 +35,19 @@ import { RoomExceptionFilter } from '../filters/room-exception.filter';
  * use cases, and shapes HTTP responses — mirroring `AuthController`.
  *
  * Reuses {@link JwtAuthGuard} and {@link CurrentUser} exported by the
- * Authentication bounded context (B-A06) rather than redefining
+ * Authentication bounded context rather than redefining
  * authentication logic for this module.
  *
  * Routes:
- * - POST /rooms -> {@link CreateRoomUseCase} (protected by {@link JwtAuthGuard})
- * - GET  /rooms -> {@link GetPublicRoomsUseCase} (no authentication required)
+ * - POST  /rooms      -> {@link CreateRoomUseCase} (protected by {@link JwtAuthGuard})
+ * - GET   /rooms      -> {@link GetPublicRoomsUseCase} (no authentication required)
+ * - GET   /rooms/:id  -> {@link GetRoomByIdUseCase} (no authentication required)
+ * - PATCH /rooms/:id  -> {@link UpdateRoomUseCase} (protected by {@link JwtAuthGuard}, {@link OwnershipGuard})
  *
  * @see CreateRoomUseCase
  * @see GetPublicRoomsUseCase
  * @see GetRoomByIdUseCase
+ * @see UpdateRoomUseCase
  * @see RoomExceptionFilter
  */
 @Controller('rooms')
@@ -49,6 +57,7 @@ export class RoomController {
     private readonly createRoomUseCase: CreateRoomUseCase,
     private readonly getPublicRoomsUseCase: GetPublicRoomsUseCase,
     private readonly getRoomByIdUseCase: GetRoomByIdUseCase,
+    private readonly updateRoomUseCase: UpdateRoomUseCase,
   ) {}
 
   /**
@@ -126,6 +135,41 @@ export class RoomController {
   async findOne(@Param('id') id: string): Promise<RoomResponseDto> {
     const room = await this.getRoomByIdUseCase.execute(
       new GetRoomByIdParams({ roomId: id }),
+    );
+
+    return RoomResponseDto.fromRoomEntity(room);
+  }
+
+  /**
+   * PATCH /rooms/:id
+   *
+   * Updates a room's name and/or description. Only the room owner may
+   * perform this action — enforced by {@link OwnershipGuard}, which runs
+   * after {@link JwtAuthGuard} in the guard chain and reads the same
+   * `:id` route parameter this handler uses.
+   *
+   * HTTP status codes:
+   * - 200 OK            — room updated successfully.
+   * - 400 Bad Request   — validation failure (oversized name, etc.).
+   * - 401 Unauthorized  — missing, invalid, or expired access token.
+   * - 403 Forbidden     — the authenticated user is not the room owner
+   *   (thrown directly by {@link OwnershipGuard}, not via
+   *   {@link RoomExceptionFilter} — see that guard's own documentation).
+   * - 404 Not Found     — the room does not exist or is soft-deleted.
+   */
+  @Patch(':id')
+  @UseGuards(JwtAuthGuard, OwnershipGuard)
+  @HttpCode(HttpStatus.OK)
+  async update(
+    @Param('id') id: string,
+    @Body() dto: UpdateRoomDto,
+  ): Promise<RoomResponseDto> {
+    const room = await this.updateRoomUseCase.execute(
+      new UpdateRoomParams({
+        roomId: id,
+        name: dto.name,
+        description: dto.description,
+      }),
     );
 
     return RoomResponseDto.fromRoomEntity(room);

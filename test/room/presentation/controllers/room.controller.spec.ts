@@ -6,6 +6,10 @@ import { CreateRoomParams } from '../../../../src/room/domain/usecases/create-ro
 import { GetPublicRoomsUseCase } from '../../../../src/room/domain/usecases/get-public-rooms.usecase';
 import { GetRoomByIdUseCase } from '../../../../src/room/domain/usecases/get-room-by-id.usecase';
 import { GetRoomByIdParams } from '../../../../src/room/domain/usecases/get-room-by-id.params';
+import { UpdateRoomUseCase } from '../../../../src/room/domain/usecases/update-room.usecase';
+import { UpdateRoomParams } from '../../../../src/room/domain/usecases/update-room.params';
+import { UpdateRoomDto } from '../../../../src/room/presentation/dtos/update-room.dto';
+import { IRoomRepository } from '../../../../src/room/domain/repositories/room-repository.interface';
 import { RoomNotFoundFailure } from '../../../../src/room/domain/failures/room.failure';
 import { CreateRoomDto } from '../../../../src/room/presentation/dtos/create-room.dto';
 import { RoomResponseDto } from '../../../../src/room/presentation/dtos/room-response.dto';
@@ -14,7 +18,8 @@ import { AuthenticatedUser } from '../../../../src/auth/presentation/interfaces/
 import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 
 /**
- * Unit tests for RoomController.
+ * Unit tests for RoomController (create(), findAll() —
+ * presentation layer).
  *
  * CreateRoomUseCase and GetPublicRoomsUseCase are mocked. Tests verify:
  *   - The DTO and the authenticated user are correctly mapped to CreateRoomParams.
@@ -28,7 +33,8 @@ import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
  * findAll() requires no guard at all (public listing).
  *
  * @competency Unit test harness, TDD.
- * @competency Test scenarios R-CRE-01, R-CRE-05, R-LST-01, R-LST-06.
+ * @competency Test scenarios R-CRE-01, R-CRE-05, R-LST-01, R-LST-06,
+ *   R-DET-01 through R-DET-03, R-UPD-01, R-UPD-02, R-UPD-06.
  */
 describe('RoomController', () => {
   let roomController: RoomController;
@@ -40,6 +46,16 @@ describe('RoomController', () => {
   > = jest.fn();
   const getRoomByIdExecute: jest.MockedFunction<GetRoomByIdUseCase['execute']> =
     jest.fn();
+  const updateRoomExecute: jest.MockedFunction<UpdateRoomUseCase['execute']> =
+    jest.fn();
+
+  const roomRepositoryStub: IRoomRepository = {
+    create: jest.fn(),
+    findOwnerId: jest.fn(),
+    getPublicRooms: jest.fn(),
+    getById: jest.fn(),
+    update: jest.fn(),
+  };
 
   const AUTHENTICATED_USER: AuthenticatedUser = {
     userId: '550e8400-e29b-41d4-a716-446655440000',
@@ -67,6 +83,7 @@ describe('RoomController', () => {
     createExecute.mockReset();
     getPublicRoomsExecute.mockReset();
     getRoomByIdExecute.mockReset();
+    updateRoomExecute.mockReset();
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RoomController],
@@ -80,6 +97,11 @@ describe('RoomController', () => {
           provide: GetRoomByIdUseCase,
           useValue: { execute: getRoomByIdExecute },
         },
+        {
+          provide: UpdateRoomUseCase,
+          useValue: { execute: updateRoomExecute },
+        },
+        { provide: IRoomRepository, useValue: roomRepositoryStub },
       ],
     }).compile();
 
@@ -265,6 +287,81 @@ describe('RoomController', () => {
       await expect(roomController.findOne(MOCK_ROOM.id)).rejects.toThrow(
         'Database unavailable',
       );
+    });
+  });
+
+  // --- PATCH /rooms/:id (B-R04-T2) ---
+
+  describe('update()', () => {
+    const VALID_UPDATE_DTO: UpdateRoomDto = Object.assign(new UpdateRoomDto(), {
+      name: 'Renamed Movie Night',
+      description: 'Updated description',
+    });
+
+    const UPDATED_ROOM = new RoomEntity({
+      ...MOCK_ROOM,
+      name: 'Renamed Movie Night',
+      description: 'Updated description',
+    });
+
+    it('should return a RoomResponseDto on success', async () => {
+      updateRoomExecute.mockResolvedValue(UPDATED_ROOM);
+
+      const response = await roomController.update(
+        MOCK_ROOM.id,
+        VALID_UPDATE_DTO,
+      );
+
+      expect(response).toBeInstanceOf(RoomResponseDto);
+      expect(response.name).toBe('Renamed Movie Night');
+    });
+
+    it('should call UpdateRoomUseCase.execute with params built from the route param and DTO', async () => {
+      updateRoomExecute.mockResolvedValue(UPDATED_ROOM);
+
+      await roomController.update(MOCK_ROOM.id, VALID_UPDATE_DTO);
+
+      expect(updateRoomExecute).toHaveBeenCalledWith(
+        expect.objectContaining<Partial<UpdateRoomParams>>({
+          roomId: MOCK_ROOM.id,
+          name: VALID_UPDATE_DTO.name,
+          description: VALID_UPDATE_DTO.description,
+        }),
+      );
+    });
+
+    it('should support a partial update (description only)', async () => {
+      updateRoomExecute.mockResolvedValue(UPDATED_ROOM);
+      const partialDto: UpdateRoomDto = Object.assign(new UpdateRoomDto(), {
+        description: 'Only description changes',
+      });
+
+      await roomController.update(MOCK_ROOM.id, partialDto);
+
+      expect(updateRoomExecute).toHaveBeenCalledWith(
+        expect.objectContaining<Partial<UpdateRoomParams>>({
+          name: undefined,
+          description: 'Only description changes',
+        }),
+      );
+    });
+
+    it('should propagate RoomNotFoundFailure (RoomExceptionFilter maps it to 404) (R-UPD-06)', async () => {
+      updateRoomExecute.mockRejectedValue(
+        new RoomNotFoundFailure('unknown-id'),
+      );
+
+      await expect(
+        roomController.update('unknown-id', VALID_UPDATE_DTO),
+      ).rejects.toThrow(RoomNotFoundFailure);
+    });
+
+    it('should not swallow unexpected errors', async () => {
+      updateRoomExecute.mockRejectedValue(new Error('Database unavailable'));
+
+      await expect(
+        roomController.update(MOCK_ROOM.id, VALID_UPDATE_DTO),
+      ).rejects.toThrow('Database unavailable');
     });
   });
 });

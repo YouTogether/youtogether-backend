@@ -1,9 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
-import { DataSource } from 'typeorm';
+import { DataSource, IsNull } from 'typeorm';
 
 import { IRoomRepository } from '../../domain/repositories/room-repository.interface';
 import { CreateRoomParams } from '../../domain/usecases/create-room.params';
+import { UpdateRoomParams } from '../../domain/usecases/update-room.params';
 import { RoomEntity } from '../../domain/entities/room.entity';
 import { RoomNotFoundFailure } from '../../domain/failures/room.failure';
 import { RoomMapper } from '../mappers/room.mapper';
@@ -150,5 +151,47 @@ export class RoomRepositoryImpl implements IRoomRepository {
     }
 
     return RoomMapper.toDomain(entities[0], parseInt(raw[0].memberCount, 10));
+  }
+
+  /**
+   * Updates a room's name and/or description, then returns it with a
+   * freshly computed active member count.
+   *
+   * Ownership is not re-checked here — see {@link IRoomRepository.update}.
+   * Loads the row via `findOne` (which excludes soft-deleted rows by
+   * TypeORM's default behavior for `@DeleteDateColumn` entities, unlike
+   * the explicit `deletedAt IS NULL` needed in `QueryBuilder` methods),
+   * applies only the fields actually provided (`undefined` means "leave
+   * unchanged"), and saves — `updatedAt` is refreshed automatically by
+   * TypeORM's `@UpdateDateColumn` on `save()`.
+   *
+   * @param params - The room id and the fields to update (partial).
+   * @returns The updated {@link RoomEntity}.
+   * @throws {@link RoomNotFoundFailure} if no active room exists with this id.
+   */
+  async update(params: UpdateRoomParams): Promise<RoomEntity> {
+    const roomRepository = this.dataSource.getRepository(RoomOrmEntity);
+    const room = await roomRepository.findOne({
+      where: { id: params.roomId },
+    });
+
+    if (room === null) {
+      throw new RoomNotFoundFailure(params.roomId);
+    }
+
+    if (params.name !== undefined) {
+      room.name = params.name;
+    }
+    if (params.description !== undefined) {
+      room.description = params.description;
+    }
+
+    const savedRoom = await roomRepository.save(room);
+
+    const memberCount = await this.dataSource
+      .getRepository(RoomMembershipOrmEntity)
+      .count({ where: { roomId: savedRoom.id, leftAt: IsNull() } });
+
+    return RoomMapper.toDomain(savedRoom, memberCount);
   }
 }
