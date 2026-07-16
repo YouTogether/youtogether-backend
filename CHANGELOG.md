@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.8.0](https://github.com/YouTogether/youtogether-backend/compare/v0.7.0...v0.8.0) (2026-07-16)
+
+
+### Features
+
+* **room:** [B-R05-T1] delete room endpoint DELETE /rooms/:id ([#50](https://github.com/YouTogether/youtogether-backend/issues/50)) ([cd829a5](https://github.com/YouTogether/youtogether-backend/commit/cd829a515830f67df96388bb83bf870d4491f946))
+
 ## [0.7.0](https://github.com/YouTogether/youtogether-backend/compare/v0.6.0...v0.7.0) (2026-07-16)
 
 
