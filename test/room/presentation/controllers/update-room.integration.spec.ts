@@ -24,6 +24,7 @@ import { GetRoomByIdUseCase } from '../../../../src/room/domain/usecases/get-roo
 import { UpdateRoomUseCase } from '../../../../src/room/domain/usecases/update-room.usecase';
 import { OwnershipGuard } from '../../../../src/room/presentation/guards/ownership.guard';
 import { RoomController } from '../../../../src/room/presentation/controllers/room.controller';
+import { DeleteRoomUseCase } from '../../../../src/room/domain/usecases/delete-room.usecase';
 
 /**
  * Integration tests for PATCH /rooms/:id.
@@ -133,6 +134,7 @@ describe('PATCH /rooms/:id (integration)', () => {
         GetPublicRoomsUseCase,
         GetRoomByIdUseCase,
         UpdateRoomUseCase,
+        DeleteRoomUseCase,
         OwnershipGuard,
         JwtStrategy,
         { provide: IRoomRepository, useClass: RoomRepositoryImpl },

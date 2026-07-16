@@ -88,4 +88,19 @@ export abstract class IRoomRepository {
    * @throws {@link RoomNotFoundFailure} if no active room exists with this id.
    */
   abstract update(params: UpdateRoomParams): Promise<RoomEntity>;
+
+  /**
+   * Soft-deletes a room (sets `deleted_at`), preserving its
+   * `room_memberships` history for audit purposes.
+   *
+   * Ownership is not re-checked here — see {@link update} for the same
+   * rationale. Also covers the "already deleted" case defensively,
+   * although in practice `OwnershipGuard` (whose `findOwnerId` lookup
+   * excludes soft-deleted rows) already rejects a second delete attempt
+   * with 404 before this method is ever called.
+   *
+   * @param roomId - The room's id.
+   * @throws {@link RoomNotFoundFailure} if no active room exists with this id.
+   */
+  abstract delete(roomId: string): Promise<void>;
 }

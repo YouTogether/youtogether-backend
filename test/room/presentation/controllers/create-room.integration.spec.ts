@@ -23,6 +23,7 @@ import { GetPublicRoomsUseCase } from '../../../../src/room/domain/usecases/get-
 import { GetRoomByIdUseCase } from '../../../../src/room/domain/usecases/get-room-by-id.usecase';
 import { UpdateRoomUseCase } from '../../../../src/room/domain/usecases/update-room.usecase';
 import { RoomController } from '../../../../src/room/presentation/controllers/room.controller';
+import { DeleteRoomUseCase } from '../../../../src/room/domain/usecases/delete-room.usecase';
 
 /**
  * Integration tests for POST /rooms.
@@ -139,6 +140,7 @@ describe('POST /rooms (integration)', () => {
         GetPublicRoomsUseCase,
         GetRoomByIdUseCase,
         UpdateRoomUseCase,
+        DeleteRoomUseCase,
         JwtStrategy,
         { provide: IRoomRepository, useClass: RoomRepositoryImpl },
       ],

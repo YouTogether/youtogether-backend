@@ -23,6 +23,7 @@ describe('UpdateRoomUseCase', () => {
   const getPublicRoomsMock = jest.fn();
   const getByIdMock = jest.fn();
   const updateMock = jest.fn<Promise<RoomEntity>, [UpdateRoomParams]>();
+  const deleteMock = jest.fn();
 
   const VALID_PARAMS = new UpdateRoomParams({
     roomId: '7b2e6b0a-2f2a-4b6a-8e2a-1a2b3c4d5e6f',
@@ -47,12 +48,14 @@ describe('UpdateRoomUseCase', () => {
     getPublicRoomsMock.mockReset();
     getByIdMock.mockReset();
     updateMock.mockReset();
+    deleteMock.mockReset();
     const roomRepository: IRoomRepository = {
       create: createMock,
       findOwnerId: findOwnerIdMock,
       getPublicRooms: getPublicRoomsMock,
       getById: getByIdMock,
       update: updateMock,
+      delete: deleteMock,
     };
     updateRoomUseCase = new UpdateRoomUseCase(roomRepository);
   });
