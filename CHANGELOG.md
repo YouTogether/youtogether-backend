@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/YouTogether/youtogether-backend/compare/v0.6.0...v0.7.0) (2026-07-16)
+
+
+### Features
+
+* **room:** [B-R04-T2] add PATCH /rooms/:id endpoint ([#48](https://github.com/YouTogether/youtogether-backend/issues/48)) ([15d13e0](https://github.com/YouTogether/youtogether-backend/commit/15d13e0c53d7352dc9f3f2cdc71290623012602e))
+
 ## [0.6.0](https://github.com/YouTogether/youtogether-backend/compare/v0.5.0...v0.6.0) (2026-07-15)
 
 
