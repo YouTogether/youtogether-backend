@@ -304,4 +304,37 @@ describe('RoomRepositoryImpl (unit)', () => {
       expect(result.memberCount).toBe(3);
     });
   });
+
+  describe('delete', () => {
+    it('should call softDelete with the room id', async () => {
+      const softDeleteMock = jest.fn().mockResolvedValue({ affected: 1 });
+      (dataSource.getRepository as jest.Mock).mockReturnValue({
+        softDelete: softDeleteMock,
+      } as unknown as Repository<RoomOrmEntity>);
+
+      await repository.delete('room-uuid');
+
+      expect(softDeleteMock).toHaveBeenCalledWith('room-uuid');
+    });
+
+    it('should throw RoomNotFoundFailure when no row is affected (already deleted or non-existent) (R-DEL-05)', async () => {
+      const softDeleteMock = jest.fn().mockResolvedValue({ affected: 0 });
+      (dataSource.getRepository as jest.Mock).mockReturnValue({
+        softDelete: softDeleteMock,
+      } as unknown as Repository<RoomOrmEntity>);
+
+      await expect(repository.delete('unknown-uuid')).rejects.toThrow(
+        RoomNotFoundFailure,
+      );
+    });
+
+    it('should resolve with no value on success', async () => {
+      const softDeleteMock = jest.fn().mockResolvedValue({ affected: 1 });
+      (dataSource.getRepository as jest.Mock).mockReturnValue({
+        softDelete: softDeleteMock,
+      } as unknown as Repository<RoomOrmEntity>);
+
+      await expect(repository.delete('room-uuid')).resolves.toBeUndefined();
+    });
+  });
 });
