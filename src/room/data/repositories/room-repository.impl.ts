@@ -6,7 +6,10 @@ import { IRoomRepository } from '../../domain/repositories/room-repository.inter
 import { CreateRoomParams } from '../../domain/usecases/create-room.params';
 import { UpdateRoomParams } from '../../domain/usecases/update-room.params';
 import { RoomEntity } from '../../domain/entities/room.entity';
-import { RoomNotFoundFailure } from '../../domain/failures/room.failure';
+import {
+  RoomNotFoundFailure,
+  RoomAlreadyJoinedFailure,
+} from '../../domain/failures/room.failure';
 import { RoomMapper } from '../mappers/room.mapper';
 import { RoomOrmEntity } from '../entities/room.orm-entity';
 import { RoomMembershipOrmEntity } from '../entities/room-membership.orm-entity';
@@ -216,5 +219,77 @@ export class RoomRepositoryImpl implements IRoomRepository {
     if (result.affected === 0) {
       throw new RoomNotFoundFailure(roomId);
     }
+  }
+
+  /**
+   * Creates an active membership for a user in a room.
+   *
+   * Defense in depth against the race window between the pre-check and
+   * the insert: a pre-check against an existing active membership gives
+   * a clean, predictable 409 in the common case, while the
+   * `try`/`catch` around the insert falls back to translating a
+   * genuine unique-constraint violation (Postgres error code `23505`,
+   * from `IDX_room_memberships_active_unique`) into the same
+   * {@link RoomAlreadyJoinedFailure} if two requests race each other.
+   * Any other database error is rethrown unchanged.
+   *
+   * @param roomId - The room's id.
+   * @param userId - The joining user's id.
+   * @returns The room, with a freshly computed active member count.
+   * @throws {@link RoomNotFoundFailure} if no active room exists with this id.
+   * @throws {@link RoomAlreadyJoinedFailure} if the user already holds an
+   *   active membership in this room.
+   */
+  async join(roomId: string, userId: string): Promise<RoomEntity> {
+    const room = await this.dataSource
+      .getRepository(RoomOrmEntity)
+      .findOne({ where: { id: roomId } });
+
+    if (room === null) {
+      throw new RoomNotFoundFailure(roomId);
+    }
+
+    const membershipRepository = this.dataSource.getRepository(
+      RoomMembershipOrmEntity,
+    );
+
+    const existingActiveMembership = await membershipRepository.findOne({
+      where: { roomId, userId, leftAt: IsNull() },
+    });
+
+    if (existingActiveMembership !== null) {
+      throw new RoomAlreadyJoinedFailure(roomId, userId);
+    }
+
+    try {
+      const membership = membershipRepository.create({ roomId, userId });
+      await membershipRepository.save(membership);
+    } catch (error) {
+      if (RoomRepositoryImpl.isUniqueViolation(error)) {
+        throw new RoomAlreadyJoinedFailure(roomId, userId);
+      }
+      throw error;
+    }
+
+    const memberCount = await membershipRepository.count({
+      where: { roomId, leftAt: IsNull() },
+    });
+
+    return RoomMapper.toDomain(room, memberCount);
+  }
+
+  /**
+   * Checks whether a caught error is a PostgreSQL unique constraint
+   * violation (SQLSTATE `23505`), without depending on `pg`'s error
+   * class directly (TypeORM does not consistently re-export it across
+   * drivers).
+   */
+  private static isUniqueViolation(error: unknown): boolean {
+    return (
+      typeof error === 'object' &&
+      error !== null &&
+      'code' in error &&
+      (error as { code: unknown }).code === '23505'
+    );
   }
 }
