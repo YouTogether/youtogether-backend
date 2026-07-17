@@ -25,6 +25,7 @@ import { UpdateRoomUseCase } from '../../../../src/room/domain/usecases/update-r
 import { DeleteRoomUseCase } from '../../../../src/room/domain/usecases/delete-room.usecase';
 import { OwnershipGuard } from '../../../../src/room/presentation/guards/ownership.guard';
 import { RoomController } from '../../../../src/room/presentation/controllers/room.controller';
+import { JoinRoomUseCase } from '../../../../src/room/domain/usecases/join-room.usecase';
 
 /**
  * Integration tests for DELETE /rooms/:id.
@@ -129,6 +130,7 @@ describe('DELETE /rooms/:id (integration)', () => {
         GetRoomByIdUseCase,
         UpdateRoomUseCase,
         DeleteRoomUseCase,
+        JoinRoomUseCase,
         OwnershipGuard,
         JwtStrategy,
         { provide: IRoomRepository, useClass: RoomRepositoryImpl },

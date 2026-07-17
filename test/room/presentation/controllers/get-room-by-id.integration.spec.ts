@@ -23,6 +23,7 @@ import { GetRoomByIdUseCase } from '../../../../src/room/domain/usecases/get-roo
 import { RoomController } from '../../../../src/room/presentation/controllers/room.controller';
 import { UpdateRoomUseCase } from '../../../../src/room/domain/usecases/update-room.usecase';
 import { DeleteRoomUseCase } from '../../../../src/room/domain/usecases/delete-room.usecase';
+import { JoinRoomUseCase } from '../../../../src/room/domain/usecases/join-room.usecase';
 
 /**
  * Integration tests for GET /rooms/:id.
@@ -33,8 +34,7 @@ import { DeleteRoomUseCase } from '../../../../src/room/domain/usecases/delete-r
  * - 404 Not Found for a soft-deleted room.
  *
  * No `currentVideoSession` field is asserted here: the `video_sessions`
- * table does not exist yet (it is introduced in Sprint 3, B-V01-T1 —
- * see the response documented in this task's delivery notes). This
+ * table does not exist yet. This
  * endpoint deliberately returns room + member count only for now.
  *
  * @competency Integration test harness.
@@ -130,6 +130,7 @@ describe('GET /rooms/:id (integration)', () => {
         GetRoomByIdUseCase,
         UpdateRoomUseCase,
         DeleteRoomUseCase,
+        JoinRoomUseCase,
         JwtStrategy,
         { provide: IRoomRepository, useClass: RoomRepositoryImpl },
       ],

@@ -103,4 +103,19 @@ export abstract class IRoomRepository {
    * @throws {@link RoomNotFoundFailure} if no active room exists with this id.
    */
   abstract delete(roomId: string): Promise<void>;
+
+  /**
+   * Creates an active membership for a user in a room.
+   *
+   * @param roomId - The room's id.
+   * @param userId - The joining user's id.
+   * @returns The room, with a freshly computed active member count.
+   * @throws {@link RoomNotFoundFailure} if no active room exists with this id.
+   * @throws {@link RoomAlreadyJoinedFailure} if the user already holds an
+   *   active membership in this room (the partial unique index on
+   *   `room_memberships` permits a *new* row once a prior one has
+   *   `left_at` set — this failure only fires for a genuine duplicate
+   *   active membership).
+   */
+  abstract join(roomId: string, userId: string): Promise<RoomEntity>;
 }
