@@ -6,7 +6,7 @@ import { GetCurrentUserParams } from '../../../../src/auth/domain/usecases/get-c
 import { GetCurrentUserUseCase } from '../../../../src/auth/domain/usecases/get-current-user.usecase';
 
 /**
- * Unit tests for GetCurrentUserUseCase (B-A05-T1 — domain layer).
+ * Unit tests for GetCurrentUserUseCase.
  *
  * @competency Unit test harness, TDD cycle.
  * @competency Scenarios: success delegation, error propagation.

@@ -6,15 +6,15 @@ import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 import { JwtStrategy } from '../../../../src/auth/presentation/strategies/jwt.strategy';
 
 /**
- * Unit tests for JwtStrategy (B-A06-T1 — presentation layer).
+ * Unit tests for JwtStrategy.
  *
  * The Passport machinery (signature verification, expiration) is exercised by
  * the parent class and integration tests. These unit tests focus on:
  * - The strategy resolves the secret from ConfigService.
  * - validate() maps the JWT payload to the AuthenticatedUser shape.
  *
- * @competency C2.2.2 — Unit test harness, TDD.
- * @competency C2.3.1 — Test scenarios for token claim mapping.
+ * @competency Unit test harness, TDD.
+ * @competency Test scenarios for token claim mapping.
  */
 describe('JwtStrategy', () => {
   let strategy: JwtStrategy;

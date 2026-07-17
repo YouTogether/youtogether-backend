@@ -25,7 +25,7 @@ import { JwtStrategy } from '../../../../src/auth/presentation/strategies/jwt.st
 import { CreateUsersTable1714000000000 } from '../../../../src/database/migrations/1714000000000-CreateUsersTable';
 
 /**
- * Integration tests for GET /auth/me (B-A05-T1).
+ * Integration tests for GET /auth/me.
  *
  * The second endpoint (after POST /auth/logout) to mount JwtAuthGuard, and
  * the first to actually load and return the protected resource behind it.
@@ -38,7 +38,7 @@ import { CreateUsersTable1714000000000 } from '../../../../src/database/migratio
  *   cryptographically valid, but the fresh database lookup rejects it).
  *
  * @competency Integration test harness.
- * @competency Acceptance criteria for B-A05-T1: guard enforced, sensitive
+ * @competency Acceptance criteria for: guard enforced, sensitive
  *   fields excluded, 401 on invalid/expired/orphaned token.
  */
 const TEST_JWT_SECRET =

@@ -12,7 +12,7 @@ import {
  * Tracks which users have joined a room. A user may hold at most one
  * *active* membership (`left_at IS NULL`) per room, enforced by the
  * partial unique index created in the `CreateRoomsTable` migration
- * (B-R01-T1) — not by a TypeORM decorator, since TypeORM's `@Unique`
+ * — not by a TypeORM decorator, since TypeORM's `@Unique`
  * cannot express a partial (`WHERE`) constraint.
  *
  * @see CreateRoomsTable1784015715536 — IDX_room_memberships_active_unique
@@ -48,8 +48,8 @@ export class RoomMembershipOrmEntity {
 
   /**
    * Timestamp when the user left. NULL indicates an active membership.
-   * Set explicitly by `RoomRepositoryImpl.leave()` (introduced in B-R07);
-   * always NULL for a membership created by `create()` (B-R01-T2).
+   * Set explicitly by `RoomRepositoryImpl.leave()`;
+   * always NULL for a membership created by `create()`.
    */
   @Column({
     name: 'left_at',

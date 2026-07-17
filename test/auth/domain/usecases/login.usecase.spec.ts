@@ -8,7 +8,7 @@ import { LoginParams } from '../../../../src/auth/domain/usecases/login.params';
 import { LoginUseCase } from '../../../../src/auth/domain/usecases/login.usecase';
 
 /**
- * Unit tests for LoginUseCase (B-A02-T1 — domain layer).
+ * Unit tests for LoginUseCase.
  *
  * Mock repository methods are captured as standalone consts to avoid the
  * @typescript-eslint/unbound-method false positive on method references.

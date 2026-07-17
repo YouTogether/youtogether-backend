@@ -13,8 +13,7 @@ import { JwtRefreshPayload } from '../interfaces/jwt-refresh-payload.interface';
  * Service responsible for JWT token lifecycle management.
  *
  * Access tokens are short-lived JWTs signed via the NestJS {@link JwtService},
- * using `JWT_SECRET`. Refresh tokens are ALSO JWTs (revised in B-A03-T1 from
- * the original opaque-token design — see the class-level note below), signed
+ * using `JWT_SECRET`. Refresh tokens are ALSO JWTs, signed
  * directly via the `jsonwebtoken` library using a distinct secret,
  * `JWT_REFRESH_SECRET`.
  *

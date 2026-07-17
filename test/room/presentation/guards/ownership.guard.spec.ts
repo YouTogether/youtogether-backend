@@ -10,10 +10,10 @@ import { AuthenticatedUser } from '../../../../src/auth/presentation/interfaces/
 import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 
 /**
- * Unit tests for OwnershipGuard (B-R04-T1 — presentation layer).
+ * Unit tests for OwnershipGuard.
  *
  * IRoomRepository is mocked; only `findOwnerId` is exercised. Reused as-is
- * by the update (B-R04-T2) and delete (B-R05-T1) endpoints via
+ * by the update and delete endpoints via
  * `@UseGuards(JwtAuthGuard, OwnershipGuard)`.
  *
  * @competency Unit test harness, TDD.

@@ -25,7 +25,7 @@ import { JwtStrategy } from '../../../../src/auth/presentation/strategies/jwt.st
 import { CreateUsersTable1714000000000 } from '../../../../src/database/migrations/1714000000000-CreateUsersTable';
 
 /**
- * Integration tests for POST /auth/logout (B-A04-T1).
+ * Integration tests for POST /auth/logout.
  *
  * Unlike register/login/refresh, this is the first auth endpoint protected
  * by {@link JwtAuthGuard}. The guard is exercised against a fully
@@ -46,7 +46,7 @@ import { CreateUsersTable1714000000000 } from '../../../../src/database/migratio
  * - 401: an expired access token.
  *
  * @competency Integration test harness.
- * @competency Acceptance criteria for B-A04-T1: guard enforced, hash
+ * @competency Acceptance criteria for: guard enforced, hash
  *   cleared, subsequent refresh fails.
  */
 const TEST_JWT_SECRET =

@@ -1,12 +1,12 @@
 import { RoomEntity } from '../../../../src/room/domain/entities/room.entity';
 
 /**
- * Unit tests for the domain RoomEntity (B-R01-T2 — domain layer).
+ * Unit tests for the domain RoomEntity.
  *
  * Validates construction and field assignment independently of any
  * persistence or framework concern, mirroring `user.entity.spec.ts`.
  *
- * @competency C2.2.2 — Unit test harness written before production code (TDD).
+ * @competency Unit test harness written before production code (TDD).
  */
 describe('RoomEntity (domain)', () => {
   const validParams = {

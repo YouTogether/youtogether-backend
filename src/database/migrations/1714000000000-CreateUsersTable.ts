@@ -3,7 +3,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
 /**
  * Creates the `users` table for the Authentication bounded context.
  *
- * This migration is the first in the dependency chain (B-A01-T1) and must
+ * This migration is the first in the dependency chain and must
  * be executed before any other authentication-related migration or seed.
  *
  * Key design decisions:
