@@ -118,4 +118,19 @@ export abstract class IRoomRepository {
    *   active membership).
    */
   abstract join(roomId: string, userId: string): Promise<RoomEntity>;
+
+  /**
+   * Ends a user's active membership in a room (sets `left_at`).
+   *
+   * This is the last method added to the port.
+   *
+   * @param roomId - The room's id.
+   * @param userId - The leaving user's id.
+   * @throws {@link RoomNotFoundFailure} if no active room exists with this id.
+   * @throws {@link RoomOwnerCannotLeaveFailure} if `userId` is the room's
+   *   owner — an owner must delete the room rather than leave it.
+   * @throws {@link RoomMembershipNotFoundFailure} if the user holds no
+   *   active membership in this room.
+   */
+  abstract leave(roomId: string, userId: string): Promise<void>;
 }

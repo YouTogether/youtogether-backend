@@ -26,6 +26,7 @@ import { OwnershipGuard } from '../../../../src/room/presentation/guards/ownersh
 import { RoomController } from '../../../../src/room/presentation/controllers/room.controller';
 import { DeleteRoomUseCase } from '../../../../src/room/domain/usecases/delete-room.usecase';
 import { JoinRoomUseCase } from '../../../../src/room/domain/usecases/join-room.usecase';
+import { LeaveRoomUseCase } from '../../../../src/room/domain/usecases/leave-room.usecase';
 
 /**
  * Integration tests for PATCH /rooms/:id.
@@ -137,6 +138,7 @@ describe('PATCH /rooms/:id (integration)', () => {
         UpdateRoomUseCase,
         DeleteRoomUseCase,
         JoinRoomUseCase,
+        LeaveRoomUseCase,
         OwnershipGuard,
         JwtStrategy,
         { provide: IRoomRepository, useClass: RoomRepositoryImpl },

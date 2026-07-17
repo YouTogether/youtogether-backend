@@ -40,6 +40,7 @@ describe('CreateRoomUseCase', () => {
   const updateMock = jest.fn();
   const deleteMock = jest.fn();
   const joinMock = jest.fn();
+  const leaveMock = jest.fn();
 
   beforeEach(() => {
     createMock.mockReset();
@@ -49,6 +50,7 @@ describe('CreateRoomUseCase', () => {
     updateMock.mockReset();
     deleteMock.mockReset();
     joinMock.mockReset();
+    leaveMock.mockReset();
     const roomRepository: IRoomRepository = {
       create: createMock,
       findOwnerId: findOwnerIdMock,
@@ -57,6 +59,7 @@ describe('CreateRoomUseCase', () => {
       update: updateMock,
       delete: deleteMock,
       join: joinMock,
+      leave: leaveMock,
     };
     createRoomUseCase = new CreateRoomUseCase(roomRepository);
   });
