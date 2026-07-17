@@ -23,26 +23,19 @@ import { GetPublicRoomsUseCase } from '../../../../src/room/domain/usecases/get-
 import { GetRoomByIdUseCase } from '../../../../src/room/domain/usecases/get-room-by-id.usecase';
 import { UpdateRoomUseCase } from '../../../../src/room/domain/usecases/update-room.usecase';
 import { DeleteRoomUseCase } from '../../../../src/room/domain/usecases/delete-room.usecase';
-import { OwnershipGuard } from '../../../../src/room/presentation/guards/ownership.guard';
-import { RoomController } from '../../../../src/room/presentation/controllers/room.controller';
 import { JoinRoomUseCase } from '../../../../src/room/domain/usecases/join-room.usecase';
 import { LeaveRoomUseCase } from '../../../../src/room/domain/usecases/leave-room.usecase';
+import { OwnershipGuard } from '../../../../src/room/presentation/guards/ownership.guard';
+import { RoomController } from '../../../../src/room/presentation/controllers/room.controller';
 
 /**
- * Integration tests for DELETE /rooms/:id.
- *
- * Exercises the real guard chain (`JwtAuthGuard`, `OwnershipGuard`)
- * against a fully bootstrapped application, mirroring
- * `update-room.integration.spec.ts`.
+ * Integration tests for POST /rooms/:id/leave.
  *
  * Scenarios covered:
- * - 200 OK for the owner; the room disappears from the public listing;
- *   its memberships are preserved (soft delete, not a hard delete).
- * - 403 Forbidden for a non-owner.
- * - 404 Not Found for a non-existent room, and for a second delete on an
- *   already-deleted room — both rejected by {@link OwnershipGuard} itself
- *   (whose `findOwnerId` lookup excludes soft-deleted rows), never
- *   reaching {@link DeleteRoomUseCase} at all.
+ * - 200 OK for an active, non-owner member leaving.
+ * - 403 Forbidden when the room owner attempts to leave directly.
+ * - 404 Not Found when the user has no active membership.
+ * - 401 Unauthorized with no Authorization header.
  *
  * @competency Integration test harness.
  * @competency Test scenarios and expected results.
@@ -55,14 +48,14 @@ interface ErrorBody {
   statusCode: number;
 }
 
-describe('DELETE /rooms/:id (integration)', () => {
+describe('POST /rooms/:id/leave (integration)', () => {
   let app: INestApplication;
   let httpServer: Server;
   let dataSource: DataSource;
   let ownerId: string;
-  let nonOwnerId: string;
+  let memberId: string;
   let ownerToken: string;
-  let nonOwnerToken: string;
+  let memberToken: string;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -149,105 +142,89 @@ describe('DELETE /rooms/:id (integration)', () => {
     dataSource = module.get<DataSource>(getDataSourceToken());
 
     const rawOwner: unknown = await dataSource.query(`
-        INSERT INTO "users" (email, password_hash, username)
-        VALUES ('delete-owner@integration-test.com', '$2b$12$fakehashvalue', 'delete_owner') RETURNING id;
+      INSERT INTO "users" (email, password_hash, username)
+      VALUES ('leave-owner@integration-test.com', '$2b$12$fakehashvalue', 'leave_owner')
+      RETURNING id;
     `);
     ownerId = (rawOwner as { id: string }[])[0].id;
 
-    const rawNonOwner: unknown = await dataSource.query(`
-        INSERT INTO "users" (email, password_hash, username)
-        VALUES ('delete-non-owner@integration-test.com', '$2b$12$fakehashvalue', 'delete_non_owner') RETURNING id;
+    const rawMember: unknown = await dataSource.query(`
+      INSERT INTO "users" (email, password_hash, username)
+      VALUES ('leave-member@integration-test.com', '$2b$12$fakehashvalue', 'leave_member')
+      RETURNING id;
     `);
-    nonOwnerId = (rawNonOwner as { id: string }[])[0].id;
+    memberId = (rawMember as { id: string }[])[0].id;
 
     ownerToken = sign({ sub: ownerId, role: 'registered' }, TEST_JWT_SECRET, {
       expiresIn: '15m',
     });
-    nonOwnerToken = sign(
-      { sub: nonOwnerId, role: 'registered' },
-      TEST_JWT_SECRET,
-      { expiresIn: '15m' },
-    );
+    memberToken = sign({ sub: memberId, role: 'registered' }, TEST_JWT_SECRET, {
+      expiresIn: '15m',
+    });
   });
 
   afterAll(async () => {
     await dataSource.query(`
-        DELETE
-        FROM "room_memberships"
-        WHERE room_id IN
-              (SELECT id FROM "rooms" WHERE owner_id = '${ownerId}');
+      DELETE FROM "room_memberships" WHERE room_id IN
+        (SELECT id FROM "rooms" WHERE owner_id = '${ownerId}');
     `);
-    await dataSource.query(`DELETE
-                            FROM "rooms"
-                            WHERE owner_id = '${ownerId}';`);
+    await dataSource.query(
+      `DELETE FROM "rooms" WHERE owner_id = '${ownerId}';`,
+    );
     await dataSource.query(`
-        DELETE
-        FROM "users"
-        WHERE email IN (
-                        'delete-owner@integration-test.com',
-                        'delete-non-owner@integration-test.com'
-            );
+      DELETE FROM "users" WHERE email IN (
+        'leave-owner@integration-test.com',
+        'leave-member@integration-test.com'
+      );
     `);
     await app.close();
   });
 
-  async function createRoom(name: string): Promise<string> {
-    const response = await request(httpServer)
+  async function createRoomAndJoin(name: string): Promise<string> {
+    const createResponse = await request(httpServer)
       .post('/rooms')
       .set('Authorization', `Bearer ${ownerToken}`)
       .send({ name });
+    const roomId = (createResponse.body as { id: string }).id;
 
-    return (response.body as { id: string }).id;
+    await request(httpServer)
+      .post(`/rooms/${roomId}/join`)
+      .set('Authorization', `Bearer ${memberToken}`)
+      .expect(200);
+
+    return roomId;
   }
 
   describe('200 OK', () => {
-    it('should soft-delete the room for the owner and remove it from the public listing (R-DEL-01)', async () => {
-      const roomId = await createRoom('Room To Delete');
+    it('should set left_at on the active membership and decrement the member count (R-LEA-01)', async () => {
+      const roomId = await createRoomAndJoin('Room To Leave');
 
       await request(httpServer)
-        .delete(`/rooms/${roomId}`)
-        .set('Authorization', `Bearer ${ownerToken}`)
+        .post(`/rooms/${roomId}/leave`)
+        .set('Authorization', `Bearer ${memberToken}`)
         .expect(200);
 
-      const rawRoom: unknown = await dataSource.query(`
-          SELECT deleted_at
-          FROM "rooms"
-          WHERE id = '${roomId}';
+      const rawMembership: unknown = await dataSource.query(`
+        SELECT left_at FROM "room_memberships"
+        WHERE room_id = '${roomId}' AND user_id = '${memberId}';
       `);
-      const rooms = rawRoom as { deleted_at: Date | null }[];
-      expect(rooms[0].deleted_at).not.toBeNull();
+      const memberships = rawMembership as { left_at: Date | null }[];
+      expect(memberships[0].left_at).not.toBeNull();
 
-      const listingResponse = await request(httpServer).get('/rooms');
-      const listedIds = (listingResponse.body as { id: string }[]).map(
-        (room) => room.id,
+      const detailResponse = await request(httpServer).get(`/rooms/${roomId}`);
+      expect((detailResponse.body as { memberCount: number }).memberCount).toBe(
+        1,
       );
-      expect(listedIds).not.toContain(roomId);
-    });
-
-    it('should preserve room memberships after deletion for audit purposes (R-DEL-03)', async () => {
-      const roomId = await createRoom('Room With Membership History');
-
-      await request(httpServer)
-        .delete(`/rooms/${roomId}`)
-        .set('Authorization', `Bearer ${ownerToken}`)
-        .expect(200);
-
-      const rawMemberships: unknown = await dataSource.query(`
-          SELECT id
-          FROM "room_memberships"
-          WHERE room_id = '${roomId}';
-      `);
-      expect((rawMemberships as { id: string }[]).length).toBeGreaterThan(0);
     });
   });
 
   describe('403 Forbidden', () => {
-    it('should reject a deletion attempt from a non-owner (R-DEL-04)', async () => {
-      const roomId = await createRoom('Room Owned By Someone Else');
+    it('should reject the room owner attempting to leave directly (R-LEA-04)', async () => {
+      const roomId = await createRoomAndJoin('Room Owner Cannot Leave');
 
       const response = await request(httpServer)
-        .delete(`/rooms/${roomId}`)
-        .set('Authorization', `Bearer ${nonOwnerToken}`)
+        .post(`/rooms/${roomId}/leave`)
+        .set('Authorization', `Bearer ${ownerToken}`)
         .expect(403);
 
       const body = response.body as ErrorBody;
@@ -256,27 +233,33 @@ describe('DELETE /rooms/:id (integration)', () => {
   });
 
   describe('404 Not Found', () => {
-    it('should return 404 for a non-existent room', async () => {
-      const response = await request(httpServer)
-        .delete('/rooms/00000000-0000-4000-8000-000000000000')
+    it('should reject a user with no active membership (R-LEA-03)', async () => {
+      const createResponse = await request(httpServer)
+        .post('/rooms')
         .set('Authorization', `Bearer ${ownerToken}`)
+        .send({ name: 'Room Never Joined' });
+      const roomId = (createResponse.body as { id: string }).id;
+
+      const response = await request(httpServer)
+        .post(`/rooms/${roomId}/leave`)
+        .set('Authorization', `Bearer ${memberToken}`)
         .expect(404);
 
       const body = response.body as ErrorBody;
       expect(body.statusCode).toBe(404);
     });
 
-    it('should return 404 on a second delete of an already-deleted room (R-DEL-05)', async () => {
-      const roomId = await createRoom('Room To Delete Twice');
+    it('should reject a second leave attempt for an already-left membership', async () => {
+      const roomId = await createRoomAndJoin('Room Double Leave');
 
       await request(httpServer)
-        .delete(`/rooms/${roomId}`)
-        .set('Authorization', `Bearer ${ownerToken}`)
+        .post(`/rooms/${roomId}/leave`)
+        .set('Authorization', `Bearer ${memberToken}`)
         .expect(200);
 
       const response = await request(httpServer)
-        .delete(`/rooms/${roomId}`)
-        .set('Authorization', `Bearer ${ownerToken}`)
+        .post(`/rooms/${roomId}/leave`)
+        .set('Authorization', `Bearer ${memberToken}`)
         .expect(404);
 
       const body = response.body as ErrorBody;
@@ -286,9 +269,9 @@ describe('DELETE /rooms/:id (integration)', () => {
 
   describe('401 Unauthorized', () => {
     it('should reject a request with no Authorization header', async () => {
-      const roomId = await createRoom('Room For Auth Check');
+      const roomId = await createRoomAndJoin('Room For Auth Check');
 
-      await request(httpServer).delete(`/rooms/${roomId}`).expect(401);
+      await request(httpServer).post(`/rooms/${roomId}/leave`).expect(401);
     });
   });
 });

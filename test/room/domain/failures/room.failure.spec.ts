@@ -1,6 +1,8 @@
 import {
   RoomNotFoundFailure,
   RoomAlreadyJoinedFailure,
+  RoomMembershipNotFoundFailure,
+  RoomOwnerCannotLeaveFailure,
 } from '../../../../src/room/domain/failures/room.failure';
 
 /**
@@ -46,6 +48,46 @@ describe('RoomAlreadyJoinedFailure', () => {
     expect(failure.userId).toBe('550e8400-e29b-41d4-a716-446655440000');
     expect(failure.message).toBe(
       'User "550e8400-e29b-41d4-a716-446655440000" already has an active membership in room "7b2e6b0a-2f2a-4b6a-8e2a-1a2b3c4d5e6f".',
+    );
+  });
+});
+
+/**
+ * @competency Test scenario R-LEA-03 (no active membership).
+ */
+describe('RoomMembershipNotFoundFailure', () => {
+  it('should extend Error with the correct name, message, roomId, and userId', () => {
+    const failure = new RoomMembershipNotFoundFailure(
+      '7b2e6b0a-2f2a-4b6a-8e2a-1a2b3c4d5e6f',
+      '550e8400-e29b-41d4-a716-446655440000',
+    );
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).toBeInstanceOf(RoomMembershipNotFoundFailure);
+    expect(failure.name).toBe('RoomMembershipNotFoundFailure');
+    expect(failure.roomId).toBe('7b2e6b0a-2f2a-4b6a-8e2a-1a2b3c4d5e6f');
+    expect(failure.userId).toBe('550e8400-e29b-41d4-a716-446655440000');
+    expect(failure.message).toBe(
+      'User "550e8400-e29b-41d4-a716-446655440000" has no active membership in room "7b2e6b0a-2f2a-4b6a-8e2a-1a2b3c4d5e6f".',
+    );
+  });
+});
+
+/**
+ * @competency Test scenario R-LEA-04 (owner cannot leave).
+ */
+describe('RoomOwnerCannotLeaveFailure', () => {
+  it('should extend Error with the correct name, message, and roomId', () => {
+    const failure = new RoomOwnerCannotLeaveFailure(
+      '7b2e6b0a-2f2a-4b6a-8e2a-1a2b3c4d5e6f',
+    );
+
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure).toBeInstanceOf(RoomOwnerCannotLeaveFailure);
+    expect(failure.name).toBe('RoomOwnerCannotLeaveFailure');
+    expect(failure.roomId).toBe('7b2e6b0a-2f2a-4b6a-8e2a-1a2b3c4d5e6f');
+    expect(failure.message).toBe(
+      'The owner of room "7b2e6b0a-2f2a-4b6a-8e2a-1a2b3c4d5e6f" cannot leave it; delete the room instead.',
     );
   });
 });

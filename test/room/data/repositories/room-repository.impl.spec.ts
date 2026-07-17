@@ -8,6 +8,8 @@ import { UpdateRoomParams } from '../../../../src/room/domain/usecases/update-ro
 import {
   RoomNotFoundFailure,
   RoomAlreadyJoinedFailure,
+  RoomMembershipNotFoundFailure,
+  RoomOwnerCannotLeaveFailure,
 } from '../../../../src/room/domain/failures/room.failure';
 
 /**
@@ -451,6 +453,107 @@ describe('RoomRepositoryImpl (unit)', () => {
 
       expect(result.id).toBe(ROOM_ID);
       expect(result.memberCount).toBe(4);
+    });
+  });
+
+  describe('leave', () => {
+    const ROOM_ID = 'room-uuid';
+    const OWNER_ID = 'owner-uuid';
+    const MEMBER_ID = 'member-uuid';
+    const EXISTING_ROOM = {
+      id: ROOM_ID,
+      name: 'Friday Movie Night',
+      description: 'Weekly watch party',
+      ownerId: OWNER_ID,
+      isPublic: true,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    };
+
+    function mockLeaveRepositories(options: {
+      room?: typeof EXISTING_ROOM | null;
+      activeMembership?: { id: string; leftAt: null } | null;
+    }): {
+      roomFindOneMock: jest.Mock;
+      membershipFindOneMock: jest.Mock;
+      membershipSaveMock: jest.Mock<
+        Promise<{ leftAt: Date | null }>,
+        [{ leftAt: Date | null }]
+      >;
+    } {
+      const roomFindOneMock = jest
+        .fn()
+        .mockResolvedValue(
+          options.room === undefined ? EXISTING_ROOM : options.room,
+        );
+      const membershipFindOneMock = jest
+        .fn()
+        .mockResolvedValue(
+          options.activeMembership === undefined
+            ? { id: 'membership-uuid', leftAt: null }
+            : options.activeMembership,
+        );
+      const membershipSaveMock = jest
+        .fn<Promise<{ leftAt: Date | null }>, [{ leftAt: Date | null }]>()
+        .mockImplementation((membership) => Promise.resolve(membership));
+
+      (dataSource.getRepository as jest.Mock).mockImplementation(
+        (entityClass: unknown) => {
+          if (entityClass === RoomMembershipOrmEntity) {
+            return {
+              findOne: membershipFindOneMock,
+              save: membershipSaveMock,
+            } as unknown as Repository<RoomMembershipOrmEntity>;
+          }
+          return {
+            findOne: roomFindOneMock,
+          } as unknown as Repository<RoomOrmEntity>;
+        },
+      );
+
+      return { roomFindOneMock, membershipFindOneMock, membershipSaveMock };
+    }
+
+    it('should throw RoomNotFoundFailure when the room does not exist or is soft-deleted', async () => {
+      mockLeaveRepositories({ room: null });
+
+      await expect(repository.leave(ROOM_ID, MEMBER_ID)).rejects.toThrow(
+        RoomNotFoundFailure,
+      );
+    });
+
+    it('should throw RoomOwnerCannotLeaveFailure when the requesting user is the room owner (R-LEA-04)', async () => {
+      mockLeaveRepositories({});
+
+      await expect(repository.leave(ROOM_ID, OWNER_ID)).rejects.toThrow(
+        RoomOwnerCannotLeaveFailure,
+      );
+    });
+
+    it('should throw RoomMembershipNotFoundFailure when the user has no active membership (R-LEA-03)', async () => {
+      mockLeaveRepositories({ activeMembership: null });
+
+      await expect(repository.leave(ROOM_ID, MEMBER_ID)).rejects.toThrow(
+        RoomMembershipNotFoundFailure,
+      );
+    });
+
+    it('should set left_at on the active membership on success (R-LEA-01)', async () => {
+      const { membershipSaveMock } = mockLeaveRepositories({});
+
+      await repository.leave(ROOM_ID, MEMBER_ID);
+
+      const savedMembership = membershipSaveMock.mock.calls[0][0];
+      expect(savedMembership.leftAt).not.toBeNull();
+      expect(savedMembership.leftAt).toBeInstanceOf(Date);
+    });
+
+    it('should resolve with no value on success', async () => {
+      mockLeaveRepositories({});
+
+      await expect(
+        repository.leave(ROOM_ID, MEMBER_ID),
+      ).resolves.toBeUndefined();
     });
   });
 });

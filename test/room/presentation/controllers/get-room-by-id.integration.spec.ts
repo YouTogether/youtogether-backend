@@ -24,6 +24,7 @@ import { RoomController } from '../../../../src/room/presentation/controllers/ro
 import { UpdateRoomUseCase } from '../../../../src/room/domain/usecases/update-room.usecase';
 import { DeleteRoomUseCase } from '../../../../src/room/domain/usecases/delete-room.usecase';
 import { JoinRoomUseCase } from '../../../../src/room/domain/usecases/join-room.usecase';
+import { LeaveRoomUseCase } from '../../../../src/room/domain/usecases/leave-room.usecase';
 
 /**
  * Integration tests for GET /rooms/:id.
@@ -131,6 +132,7 @@ describe('GET /rooms/:id (integration)', () => {
         UpdateRoomUseCase,
         DeleteRoomUseCase,
         JoinRoomUseCase,
+        LeaveRoomUseCase,
         JwtStrategy,
         { provide: IRoomRepository, useClass: RoomRepositoryImpl },
       ],

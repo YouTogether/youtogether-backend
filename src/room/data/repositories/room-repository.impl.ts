@@ -9,6 +9,8 @@ import { RoomEntity } from '../../domain/entities/room.entity';
 import {
   RoomNotFoundFailure,
   RoomAlreadyJoinedFailure,
+  RoomMembershipNotFoundFailure,
+  RoomOwnerCannotLeaveFailure,
 } from '../../domain/failures/room.failure';
 import { RoomMapper } from '../mappers/room.mapper';
 import { RoomOrmEntity } from '../entities/room.orm-entity';
@@ -291,5 +293,51 @@ export class RoomRepositoryImpl implements IRoomRepository {
       'code' in error &&
       (error as { code: unknown }).code === '23505'
     );
+  }
+
+  /**
+   * Ends a user's active membership in a room.
+   *
+   * Check order: room existence, then the owner-cannot-leave invariant,
+   * then active-membership existence. The owner check is placed before
+   * the membership lookup because an owner always holds an active
+   * membership (auto-joined at creation) — checking ownership first
+   * avoids a redundant membership query for the one case where the
+   * answer is already known to be "yes, but not permitted".
+   *
+   * @param roomId - The room's id.
+   * @param userId - The leaving user's id.
+   * @throws {@link RoomNotFoundFailure} if no active room exists with this id.
+   * @throws {@link RoomOwnerCannotLeaveFailure} if `userId` is the room's owner.
+   * @throws {@link RoomMembershipNotFoundFailure} if the user holds no
+   *   active membership in this room.
+   */
+  async leave(roomId: string, userId: string): Promise<void> {
+    const room = await this.dataSource
+      .getRepository(RoomOrmEntity)
+      .findOne({ where: { id: roomId } });
+
+    if (room === null) {
+      throw new RoomNotFoundFailure(roomId);
+    }
+
+    if (room.ownerId === userId) {
+      throw new RoomOwnerCannotLeaveFailure(roomId);
+    }
+
+    const membershipRepository = this.dataSource.getRepository(
+      RoomMembershipOrmEntity,
+    );
+
+    const activeMembership = await membershipRepository.findOne({
+      where: { roomId, userId, leftAt: IsNull() },
+    });
+
+    if (activeMembership === null) {
+      throw new RoomMembershipNotFoundFailure(roomId, userId);
+    }
+
+    activeMembership.leftAt = new Date();
+    await membershipRepository.save(activeMembership);
   }
 }

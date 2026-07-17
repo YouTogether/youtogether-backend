@@ -25,6 +25,7 @@ describe('UpdateRoomUseCase', () => {
   const updateMock = jest.fn<Promise<RoomEntity>, [UpdateRoomParams]>();
   const deleteMock = jest.fn();
   const joinMock = jest.fn();
+  const leaveMock = jest.fn();
 
   const VALID_PARAMS = new UpdateRoomParams({
     roomId: '7b2e6b0a-2f2a-4b6a-8e2a-1a2b3c4d5e6f',
@@ -51,6 +52,7 @@ describe('UpdateRoomUseCase', () => {
     updateMock.mockReset();
     deleteMock.mockReset();
     joinMock.mockReset();
+    leaveMock.mockReset();
     const roomRepository: IRoomRepository = {
       create: createMock,
       findOwnerId: findOwnerIdMock,
@@ -59,6 +61,7 @@ describe('UpdateRoomUseCase', () => {
       update: updateMock,
       delete: deleteMock,
       join: joinMock,
+      leave: leaveMock,
     };
     updateRoomUseCase = new UpdateRoomUseCase(roomRepository);
   });

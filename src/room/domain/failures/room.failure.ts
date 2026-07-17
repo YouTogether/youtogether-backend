@@ -52,3 +52,58 @@ export class RoomAlreadyJoinedFailure extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
+
+/**
+ * Thrown by the room repository when a user attempts to leave a room
+ * they hold no *active* membership in.
+ *
+ * The presentation layer maps this failure to HTTP 404 Not Found via
+ * {@link RoomExceptionFilter}, consistent with {@link RoomNotFoundFailure}
+ * — from the caller's perspective, "nothing to leave" reads the same as
+ * "resource not found".
+ *
+ * @see IRoomRepository.leave
+ * @see RoomExceptionFilter
+ */
+export class RoomMembershipNotFoundFailure extends Error {
+  readonly roomId: string;
+  readonly userId: string;
+
+  constructor(roomId: string, userId: string) {
+    super(`User "${userId}" has no active membership in room "${roomId}".`);
+    this.name = 'RoomMembershipNotFoundFailure';
+    this.roomId = roomId;
+    this.userId = userId;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Thrown when the room's owner attempts to leave it via the
+ * `POST /rooms/:id/leave` endpoint.
+ *
+ * This is a business invariant, not an access-control check: an owner
+ * always holds an active membership (auto-joined at creation)
+ * and is technically capable of leaving at the data level, but the
+ * bounded context requires every room to retain its owner as a member —
+ * relinquishing that role means deleting the room (`DELETE /rooms/:id`),
+ * not leaving it.
+ *
+ * The presentation layer maps this failure to HTTP 403 Forbidden via
+ * {@link RoomExceptionFilter}.
+ *
+ * @see IRoomRepository.leave
+ * @see RoomExceptionFilter
+ */
+export class RoomOwnerCannotLeaveFailure extends Error {
+  readonly roomId: string;
+
+  constructor(roomId: string) {
+    super(
+      `The owner of room "${roomId}" cannot leave it; delete the room instead.`,
+    );
+    this.name = 'RoomOwnerCannotLeaveFailure';
+    this.roomId = roomId;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
