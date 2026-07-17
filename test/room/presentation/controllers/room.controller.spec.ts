@@ -13,10 +13,14 @@ import { DeleteRoomUseCase } from '../../../../src/room/domain/usecases/delete-r
 import { DeleteRoomParams } from '../../../../src/room/domain/usecases/delete-room.params';
 import { JoinRoomUseCase } from '../../../../src/room/domain/usecases/join-room.usecase';
 import { JoinRoomParams } from '../../../../src/room/domain/usecases/join-room.params';
+import { LeaveRoomUseCase } from '../../../../src/room/domain/usecases/leave-room.usecase';
+import { LeaveRoomParams } from '../../../../src/room/domain/usecases/leave-room.params';
 import { IRoomRepository } from '../../../../src/room/domain/repositories/room-repository.interface';
 import {
   RoomNotFoundFailure,
   RoomAlreadyJoinedFailure,
+  RoomMembershipNotFoundFailure,
+  RoomOwnerCannotLeaveFailure,
 } from '../../../../src/room/domain/failures/room.failure';
 import { CreateRoomDto } from '../../../../src/room/presentation/dtos/create-room.dto';
 import { RoomResponseDto } from '../../../../src/room/presentation/dtos/room-response.dto';
@@ -70,6 +74,8 @@ describe('RoomController', () => {
     jest.fn();
   const joinRoomExecute: jest.MockedFunction<JoinRoomUseCase['execute']> =
     jest.fn();
+  const leaveRoomExecute: jest.MockedFunction<LeaveRoomUseCase['execute']> =
+    jest.fn();
 
   const roomRepositoryStub: IRoomRepository = {
     create: jest.fn(),
@@ -79,6 +85,7 @@ describe('RoomController', () => {
     update: jest.fn(),
     delete: jest.fn(),
     join: jest.fn(),
+    leave: jest.fn(),
   };
 
   const AUTHENTICATED_USER: AuthenticatedUser = {
@@ -110,6 +117,7 @@ describe('RoomController', () => {
     updateRoomExecute.mockReset();
     deleteRoomExecute.mockReset();
     joinRoomExecute.mockReset();
+    leaveRoomExecute.mockReset();
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RoomController],
@@ -134,6 +142,10 @@ describe('RoomController', () => {
         {
           provide: JoinRoomUseCase,
           useValue: { execute: joinRoomExecute },
+        },
+        {
+          provide: LeaveRoomUseCase,
+          useValue: { execute: leaveRoomExecute },
         },
         { provide: IRoomRepository, useValue: roomRepositoryStub },
       ],
@@ -495,6 +507,62 @@ describe('RoomController', () => {
 
       await expect(
         roomController.join(MOCK_ROOM.id, AUTHENTICATED_USER),
+      ).rejects.toThrow('Database unavailable');
+    });
+  });
+
+  // --- POST /rooms/:id/leave ---
+
+  describe('leave()', () => {
+    it('should resolve with no value on success (R-LEA-01)', async () => {
+      leaveRoomExecute.mockResolvedValue(undefined);
+
+      await expect(
+        roomController.leave(MOCK_ROOM.id, AUTHENTICATED_USER),
+      ).resolves.toBeUndefined();
+    });
+
+    it('should call LeaveRoomUseCase.execute with params built from the route parameter and the authenticated user', async () => {
+      leaveRoomExecute.mockResolvedValue(undefined);
+
+      await roomController.leave(MOCK_ROOM.id, AUTHENTICATED_USER);
+
+      expect(leaveRoomExecute).toHaveBeenCalledWith(
+        expect.objectContaining<Partial<LeaveRoomParams>>({
+          roomId: MOCK_ROOM.id,
+          userId: AUTHENTICATED_USER.userId,
+        }),
+      );
+    });
+
+    it('should propagate RoomMembershipNotFoundFailure (RoomExceptionFilter maps it to 404) (R-LEA-03)', async () => {
+      leaveRoomExecute.mockRejectedValue(
+        new RoomMembershipNotFoundFailure(
+          MOCK_ROOM.id,
+          AUTHENTICATED_USER.userId,
+        ),
+      );
+
+      await expect(
+        roomController.leave(MOCK_ROOM.id, AUTHENTICATED_USER),
+      ).rejects.toThrow(RoomMembershipNotFoundFailure);
+    });
+
+    it('should propagate RoomOwnerCannotLeaveFailure (RoomExceptionFilter maps it to 403) (R-LEA-04)', async () => {
+      leaveRoomExecute.mockRejectedValue(
+        new RoomOwnerCannotLeaveFailure(MOCK_ROOM.id),
+      );
+
+      await expect(
+        roomController.leave(MOCK_ROOM.id, AUTHENTICATED_USER),
+      ).rejects.toThrow(RoomOwnerCannotLeaveFailure);
+    });
+
+    it('should not swallow unexpected errors', async () => {
+      leaveRoomExecute.mockRejectedValue(new Error('Database unavailable'));
+
+      await expect(
+        roomController.leave(MOCK_ROOM.id, AUTHENTICATED_USER),
       ).rejects.toThrow('Database unavailable');
     });
   });
