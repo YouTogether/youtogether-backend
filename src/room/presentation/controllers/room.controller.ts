@@ -23,6 +23,8 @@ import { DeleteRoomUseCase } from '../../domain/usecases/delete-room.usecase';
 import { DeleteRoomParams } from '../../domain/usecases/delete-room.params';
 import { JoinRoomUseCase } from '../../domain/usecases/join-room.usecase';
 import { JoinRoomParams } from '../../domain/usecases/join-room.params';
+import { LeaveRoomUseCase } from '../../domain/usecases/leave-room.usecase';
+import { LeaveRoomParams } from '../../domain/usecases/leave-room.params';
 import { CreateRoomDto } from '../dtos/create-room.dto';
 import { UpdateRoomDto } from '../dtos/update-room.dto';
 import { RoomResponseDto } from '../dtos/room-response.dto';
@@ -50,6 +52,7 @@ import { OwnershipGuard } from '../guards/ownership.guard';
  * - PATCH  /rooms/:id       -> {@link UpdateRoomUseCase} (protected by {@link JwtAuthGuard}, {@link OwnershipGuard})
  * - DELETE /rooms/:id       -> {@link DeleteRoomUseCase} (protected by {@link JwtAuthGuard}, {@link OwnershipGuard})
  * - POST   /rooms/:id/join  -> {@link JoinRoomUseCase} (protected by {@link JwtAuthGuard})
+ * - POST   /rooms/:id/leave -> {@link LeaveRoomUseCase} (protected by {@link JwtAuthGuard})
  *
  * @see CreateRoomUseCase
  * @see GetPublicRoomsUseCase
@@ -57,6 +60,7 @@ import { OwnershipGuard } from '../guards/ownership.guard';
  * @see UpdateRoomUseCase
  * @see DeleteRoomUseCase
  * @see JoinRoomUseCase
+ * @see LeaveRoomUseCase
  * @see RoomExceptionFilter
  */
 @Controller('rooms')
@@ -69,6 +73,7 @@ export class RoomController {
     private readonly updateRoomUseCase: UpdateRoomUseCase,
     private readonly deleteRoomUseCase: DeleteRoomUseCase,
     private readonly joinRoomUseCase: JoinRoomUseCase,
+    private readonly leaveRoomUseCase: LeaveRoomUseCase,
   ) {}
 
   /**
@@ -240,5 +245,33 @@ export class RoomController {
     );
 
     return RoomResponseDto.fromRoomEntity(room);
+  }
+
+  /**
+   * POST /rooms/:id/leave
+   *
+   * Ends the authenticated user's active membership in the given room.
+   * No `OwnershipGuard` here — unlike `PATCH`/`DELETE`, this route is
+   * for non-owner members; the owner-cannot-leave rule is enforced as a
+   * business invariant inside the use case, not as a route-level guard.
+   *
+   * HTTP status codes:
+   * - 200 OK            — membership ended successfully.
+   * - 401 Unauthorized  — missing, invalid, or expired access token.
+   * - 403 Forbidden     — the authenticated user is the room's owner
+   *   ({@link RoomOwnerCannotLeaveFailure}); delete the room instead.
+   * - 404 Not Found     — the room does not exist, or the user holds no
+   *   active membership in it ({@link RoomMembershipNotFoundFailure}).
+   */
+  @Post(':id/leave')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async leave(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    await this.leaveRoomUseCase.execute(
+      new LeaveRoomParams({ roomId: id, userId: user.userId }),
+    );
   }
 }
