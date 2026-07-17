@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.0](https://github.com/YouTogether/youtogether-backend/compare/v0.8.0...v0.9.0) (2026-07-17)
+
+
+### Features
+
+* **room:** [B-R06-T1] join room endpoint POST /rooms/:id/join ([#52](https://github.com/YouTogether/youtogether-backend/issues/52)) ([7e11f7c](https://github.com/YouTogether/youtogether-backend/commit/7e11f7c517e0afa2a00312cd924cb0c9a3acdc69))
+
 ## [0.8.0](https://github.com/YouTogether/youtogether-backend/compare/v0.7.0...v0.8.0) (2026-07-16)
 
 
