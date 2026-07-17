@@ -40,7 +40,7 @@ import { GetCurrentUserUseCase } from '../../../../src/auth/domain/usecases/get-
  * - 400:     malformed token (fails JWT structural validation).
  *
  * @competency Integration test harness.
- * @competency Acceptance criteria for B-A03-T1.
+ * @competency Acceptance criteria.
  */
 describe('POST /auth/refresh (integration)', () => {
   let app: INestApplication;

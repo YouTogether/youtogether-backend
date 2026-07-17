@@ -1,7 +1,10 @@
 import { ArgumentsHost } from '@nestjs/common';
 import { Response } from 'express';
 
-import { RoomNotFoundFailure } from '../../../../src/room/domain/failures/room.failure';
+import {
+  RoomNotFoundFailure,
+  RoomAlreadyJoinedFailure,
+} from '../../../../src/room/domain/failures/room.failure';
 import { RoomExceptionFilter } from '../../../../src/room/presentation/filters/room-exception.filter';
 
 /**
@@ -56,5 +59,16 @@ describe('RoomExceptionFilter', () => {
 
     const [jsonBody] = jsonMock.mock.calls[0] as [{ message: string }];
     expect(jsonBody.message).toBe(failure.message);
+  });
+
+  it('should map RoomAlreadyJoinedFailure to a 409 status (R-JOI-03)', () => {
+    const failure = new RoomAlreadyJoinedFailure(
+      '7b2e6b0a-2f2a-4b6a-8e2a-1a2b3c4d5e6f',
+      '550e8400-e29b-41d4-a716-446655440000',
+    );
+
+    filter.catch(failure, host);
+
+    expect(statusMock).toHaveBeenCalledWith(409);
   });
 });

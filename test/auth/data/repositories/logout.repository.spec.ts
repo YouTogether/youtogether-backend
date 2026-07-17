@@ -8,7 +8,7 @@ import { TokenService } from '../../../../src/auth/data/services/token.service';
 import { LogoutParams } from '../../../../src/auth/domain/usecases/logout.params';
 
 /**
- * Unit tests for AuthRepositoryImpl.logout() (B-A04-T1 — data layer).
+ * Unit tests for AuthRepositoryImpl.logout().
  *
  * @competency Unit test harness, TDD.
  * @competency Scenarios: clears the stored hash, idempotent on repeated calls.

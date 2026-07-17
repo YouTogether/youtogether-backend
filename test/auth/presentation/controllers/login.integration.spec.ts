@@ -50,7 +50,7 @@ interface ErrorBody {
 }
 
 /**
- * Integration tests for POST /auth/login (B-A02-T1).
+ * Integration tests for POST /auth/login.
  *
  * A registered test user is seeded in beforeAll via POST /auth/register.
  * All login scenarios run against that seeded user.

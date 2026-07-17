@@ -55,7 +55,7 @@ export class InvalidCredentialsFailure extends Error {
  *
  * @see IAuthRepository.refresh
  * @see DomainExceptionFilter
- * @competency Replay detection (B-A03-T1)
+ * @competency Replay detection
  */
 export class InvalidRefreshTokenFailure extends Error {
   constructor() {
@@ -82,7 +82,7 @@ export class InvalidRefreshTokenFailure extends Error {
  *
  * @see IAuthRepository.getCurrentUser
  * @see DomainExceptionFilter
- * @competency Session validity beyond token cryptographic checks (B-A05-T1)
+ * @competency Session validity beyond token cryptographic checks
  */
 export class UserNotFoundFailure extends Error {
   constructor() {

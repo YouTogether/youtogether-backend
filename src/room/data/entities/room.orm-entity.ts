@@ -42,7 +42,7 @@ export class RoomOrmEntity {
   /**
    * Identifier of the user who created and owns this room.
    * Only the owner may update or delete the room (enforced by
-   * OwnershipGuard, introduced in B-R04).
+   * OwnershipGuard).
    */
   @Column({ name: 'owner_id', type: 'uuid', nullable: false })
   ownerId!: string;

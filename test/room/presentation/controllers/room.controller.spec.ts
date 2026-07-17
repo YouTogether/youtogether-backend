@@ -11,8 +11,13 @@ import { UpdateRoomParams } from '../../../../src/room/domain/usecases/update-ro
 import { UpdateRoomDto } from '../../../../src/room/presentation/dtos/update-room.dto';
 import { DeleteRoomUseCase } from '../../../../src/room/domain/usecases/delete-room.usecase';
 import { DeleteRoomParams } from '../../../../src/room/domain/usecases/delete-room.params';
+import { JoinRoomUseCase } from '../../../../src/room/domain/usecases/join-room.usecase';
+import { JoinRoomParams } from '../../../../src/room/domain/usecases/join-room.params';
 import { IRoomRepository } from '../../../../src/room/domain/repositories/room-repository.interface';
-import { RoomNotFoundFailure } from '../../../../src/room/domain/failures/room.failure';
+import {
+  RoomNotFoundFailure,
+  RoomAlreadyJoinedFailure,
+} from '../../../../src/room/domain/failures/room.failure';
 import { CreateRoomDto } from '../../../../src/room/presentation/dtos/create-room.dto';
 import { RoomResponseDto } from '../../../../src/room/presentation/dtos/room-response.dto';
 import { RoomEntity } from '../../../../src/room/domain/entities/room.entity';
@@ -63,6 +68,8 @@ describe('RoomController', () => {
     jest.fn();
   const deleteRoomExecute: jest.MockedFunction<DeleteRoomUseCase['execute']> =
     jest.fn();
+  const joinRoomExecute: jest.MockedFunction<JoinRoomUseCase['execute']> =
+    jest.fn();
 
   const roomRepositoryStub: IRoomRepository = {
     create: jest.fn(),
@@ -71,6 +78,7 @@ describe('RoomController', () => {
     getById: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),
+    join: jest.fn(),
   };
 
   const AUTHENTICATED_USER: AuthenticatedUser = {
@@ -101,6 +109,7 @@ describe('RoomController', () => {
     getRoomByIdExecute.mockReset();
     updateRoomExecute.mockReset();
     deleteRoomExecute.mockReset();
+    joinRoomExecute.mockReset();
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [RoomController],
@@ -121,6 +130,10 @@ describe('RoomController', () => {
         {
           provide: DeleteRoomUseCase,
           useValue: { execute: deleteRoomExecute },
+        },
+        {
+          provide: JoinRoomUseCase,
+          useValue: { execute: joinRoomExecute },
         },
         { provide: IRoomRepository, useValue: roomRepositoryStub },
       ],
@@ -217,7 +230,7 @@ describe('RoomController', () => {
     });
   });
 
-  // --- GET /rooms (B-R02-T1) ---
+  // --- GET /rooms ---
 
   describe('findAll()', () => {
     const MOCK_ROOMS = [MOCK_ROOM];
@@ -267,7 +280,7 @@ describe('RoomController', () => {
     });
   });
 
-  // --- GET /rooms/:id (B-R03-T1) ---
+  // --- GET /rooms/:id ---
 
   describe('findOne()', () => {
     it('should return a RoomResponseDto on success', async () => {
@@ -311,7 +324,7 @@ describe('RoomController', () => {
     });
   });
 
-  // --- PATCH /rooms/:id (B-R04-T2) ---
+  // --- PATCH /rooms/:id ---
 
   describe('update()', () => {
     const VALID_UPDATE_DTO: UpdateRoomDto = Object.assign(new UpdateRoomDto(), {
@@ -386,7 +399,7 @@ describe('RoomController', () => {
     });
   });
 
-  // --- DELETE /rooms/:id (B-R05-T1) ---
+  // --- DELETE /rooms/:id ---
 
   describe('remove()', () => {
     it('should resolve with no value on success (R-DEL-01)', async () => {
@@ -426,6 +439,63 @@ describe('RoomController', () => {
       await expect(roomController.remove(MOCK_ROOM.id)).rejects.toThrow(
         'Database unavailable',
       );
+    });
+  });
+
+  // --- POST /rooms/:id/join ---
+
+  describe('join()', () => {
+    const JOINED_ROOM = new RoomEntity({ ...MOCK_ROOM, memberCount: 2 });
+
+    it('should return a RoomResponseDto on success', async () => {
+      joinRoomExecute.mockResolvedValue(JOINED_ROOM);
+
+      const response = await roomController.join(
+        MOCK_ROOM.id,
+        AUTHENTICATED_USER,
+      );
+
+      expect(response).toBeInstanceOf(RoomResponseDto);
+      expect(response.memberCount).toBe(2);
+    });
+
+    it('should call JoinRoomUseCase.execute with params built from the route parameter and the authenticated user', async () => {
+      joinRoomExecute.mockResolvedValue(JOINED_ROOM);
+
+      await roomController.join(MOCK_ROOM.id, AUTHENTICATED_USER);
+
+      expect(joinRoomExecute).toHaveBeenCalledWith(
+        expect.objectContaining<Partial<JoinRoomParams>>({
+          roomId: MOCK_ROOM.id,
+          userId: AUTHENTICATED_USER.userId,
+        }),
+      );
+    });
+
+    it('should propagate RoomNotFoundFailure (RoomExceptionFilter maps it to 404) (R-JOI-04)', async () => {
+      joinRoomExecute.mockRejectedValue(new RoomNotFoundFailure('unknown-id'));
+
+      await expect(
+        roomController.join('unknown-id', AUTHENTICATED_USER),
+      ).rejects.toThrow(RoomNotFoundFailure);
+    });
+
+    it('should propagate RoomAlreadyJoinedFailure (RoomExceptionFilter maps it to 409) (R-JOI-03)', async () => {
+      joinRoomExecute.mockRejectedValue(
+        new RoomAlreadyJoinedFailure(MOCK_ROOM.id, AUTHENTICATED_USER.userId),
+      );
+
+      await expect(
+        roomController.join(MOCK_ROOM.id, AUTHENTICATED_USER),
+      ).rejects.toThrow(RoomAlreadyJoinedFailure);
+    });
+
+    it('should not swallow unexpected errors', async () => {
+      joinRoomExecute.mockRejectedValue(new Error('Database unavailable'));
+
+      await expect(
+        roomController.join(MOCK_ROOM.id, AUTHENTICATED_USER),
+      ).rejects.toThrow('Database unavailable');
     });
   });
 });

@@ -8,13 +8,13 @@ import { TokenService } from '../../../../src/auth/data/services/token.service';
 import { TokenPair } from '../../../../src/auth/domain/value-objects/token-pair.vo';
 
 /**
- * Unit tests for TokenService (B-A01-T3).
+ * Unit tests for TokenService.
  *
  * Both access and refresh tokens are signed/verified through a REAL
  * JwtService instance (provided via JwtModule.register), rather than a
- * hand-written mock. TokenService now routes 100% of its cryptographic
+ * handwritten mock. TokenService now routes 100% of its cryptographic
  * operations through JwtService, so testing against the real
- * implementation exercises the actual sign/verify behaviour (expiration,
+ * implementation exercises the actual sign/verify behavior (expiration,
  * signature mismatch, payload integrity) without needing a second mocking
  * strategy for the refresh-token path.
  *

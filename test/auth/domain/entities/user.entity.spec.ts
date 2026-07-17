@@ -2,7 +2,7 @@ import { UserEntity } from '../../../../src/auth/domain/entities/user.entity';
 import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 
 /**
- * Unit tests for the domain UserEntity (B-A01-T1 — domain layer).
+ * Unit tests for the domain UserEntity.
  *
  * These tests validate the pure domain entity independently of any
  * persistence or framework concern. They verify construction, field

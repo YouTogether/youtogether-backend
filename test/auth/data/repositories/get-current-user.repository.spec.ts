@@ -11,7 +11,7 @@ import { UserEntity } from '../../../../src/auth/domain/entities/user.entity';
 import { GetCurrentUserParams } from '../../../../src/auth/domain/usecases/get-current-user.params';
 
 /**
- * Unit tests for AuthRepositoryImpl.getCurrentUser() (B-A05-T1 — data layer).
+ * Unit tests for AuthRepositoryImpl.getCurrentUser().
  *
  * @competency Unit test harness, TDD.
  * @competency Scenarios: active user found, unknown id, soft-deleted user.

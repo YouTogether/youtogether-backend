@@ -8,7 +8,7 @@ import { UserOrmEntity } from '../../../../src/auth/data/entities/user.orm-entit
 import { UserRole } from '../../../../src/auth/domain/enums/user-role.enum';
 
 /**
- * Unit tests for the UserOrmEntity TypeORM metadata (B-A01-T1 — data layer).
+ * Unit tests for the UserOrmEntity TypeORM metadata.
  *
  * These tests inspect the entity metadata registered by TypeORM decorators
  * without requiring a running database. They verify that the ORM configuration

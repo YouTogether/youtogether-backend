@@ -23,3 +23,32 @@ export class RoomNotFoundFailure extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
+
+/**
+ * Thrown when a user attempts to join a room they already hold an
+ * *active* membership in (`left_at IS NULL`).
+ *
+ * Rejoining after having left is explicitly allowed (see the partial
+ * unique index on `room_memberships`) — this failure
+ * only fires for a genuinely duplicate *active* membership.
+ *
+ * The presentation layer maps this failure to HTTP 409 Conflict via
+ * {@link RoomExceptionFilter}.
+ *
+ * @see IRoomRepository.join
+ * @see RoomExceptionFilter
+ */
+export class RoomAlreadyJoinedFailure extends Error {
+  readonly roomId: string;
+  readonly userId: string;
+
+  constructor(roomId: string, userId: string) {
+    super(
+      `User "${userId}" already has an active membership in room "${roomId}".`,
+    );
+    this.name = 'RoomAlreadyJoinedFailure';
+    this.roomId = roomId;
+    this.userId = userId;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}

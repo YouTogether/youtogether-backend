@@ -23,25 +23,20 @@ import { GetPublicRoomsUseCase } from '../../../../src/room/domain/usecases/get-
 import { GetRoomByIdUseCase } from '../../../../src/room/domain/usecases/get-room-by-id.usecase';
 import { UpdateRoomUseCase } from '../../../../src/room/domain/usecases/update-room.usecase';
 import { DeleteRoomUseCase } from '../../../../src/room/domain/usecases/delete-room.usecase';
+import { JoinRoomUseCase } from '../../../../src/room/domain/usecases/join-room.usecase';
 import { OwnershipGuard } from '../../../../src/room/presentation/guards/ownership.guard';
 import { RoomController } from '../../../../src/room/presentation/controllers/room.controller';
-import { JoinRoomUseCase } from '../../../../src/room/domain/usecases/join-room.usecase';
 
 /**
- * Integration tests for DELETE /rooms/:id.
- *
- * Exercises the real guard chain (`JwtAuthGuard`, `OwnershipGuard`)
- * against a fully bootstrapped application, mirroring
- * `update-room.integration.spec.ts`.
+ * Integration tests for POST /rooms/:id/join.
  *
  * Scenarios covered:
- * - 200 OK for the owner; the room disappears from the public listing;
- *   its memberships are preserved (soft delete, not a hard delete).
- * - 403 Forbidden for a non-owner.
- * - 404 Not Found for a non-existent room, and for a second delete on an
- *   already-deleted room — both rejected by {@link OwnershipGuard} itself
- *   (whose `findOwnerId` lookup excludes soft-deleted rows), never
- *   reaching {@link DeleteRoomUseCase} at all.
+ * - 200 OK for an authenticated non-member joining an existing room.
+ * - 200 OK on rejoin after a prior membership was left (partial unique
+ *   index allows a new row once `left_at` is set on the old one).
+ * - 409 Conflict for a duplicate active membership.
+ * - 404 Not Found for a non-existent or soft-deleted room.
+ * - 401 Unauthorized with no Authorization header.
  *
  * @competency Integration test harness.
  * @competency Test scenarios and expected results.
@@ -50,18 +45,23 @@ const TEST_JWT_SECRET =
   process.env.JWT_SECRET ??
   'e675b2f9affdf3609e857294d44289bf4550c658e214dfab162d9f227e087e507b099101d302aeb480003e94527048dd';
 
+interface RoomBody {
+  id: string;
+  memberCount: number;
+}
+
 interface ErrorBody {
   statusCode: number;
 }
 
-describe('DELETE /rooms/:id (integration)', () => {
+describe('POST /rooms/:id/join (integration)', () => {
   let app: INestApplication;
   let httpServer: Server;
   let dataSource: DataSource;
   let ownerId: string;
-  let nonOwnerId: string;
+  let joinerId: string;
   let ownerToken: string;
-  let nonOwnerToken: string;
+  let joinerToken: string;
 
   beforeAll(async () => {
     const module: TestingModule = await Test.createTestingModule({
@@ -147,44 +147,40 @@ describe('DELETE /rooms/:id (integration)', () => {
     dataSource = module.get<DataSource>(getDataSourceToken());
 
     const rawOwner: unknown = await dataSource.query(`
-        INSERT INTO "users" (email, password_hash, username)
-        VALUES ('delete-owner@integration-test.com', '$2b$12$fakehashvalue', 'delete_owner') RETURNING id;
+      INSERT INTO "users" (email, password_hash, username)
+      VALUES ('join-owner@integration-test.com', '$2b$12$fakehashvalue', 'join_owner')
+      RETURNING id;
     `);
     ownerId = (rawOwner as { id: string }[])[0].id;
 
-    const rawNonOwner: unknown = await dataSource.query(`
-        INSERT INTO "users" (email, password_hash, username)
-        VALUES ('delete-non-owner@integration-test.com', '$2b$12$fakehashvalue', 'delete_non_owner') RETURNING id;
+    const rawJoiner: unknown = await dataSource.query(`
+      INSERT INTO "users" (email, password_hash, username)
+      VALUES ('join-joiner@integration-test.com', '$2b$12$fakehashvalue', 'join_joiner')
+      RETURNING id;
     `);
-    nonOwnerId = (rawNonOwner as { id: string }[])[0].id;
+    joinerId = (rawJoiner as { id: string }[])[0].id;
 
     ownerToken = sign({ sub: ownerId, role: 'registered' }, TEST_JWT_SECRET, {
       expiresIn: '15m',
     });
-    nonOwnerToken = sign(
-      { sub: nonOwnerId, role: 'registered' },
-      TEST_JWT_SECRET,
-      { expiresIn: '15m' },
-    );
+    joinerToken = sign({ sub: joinerId, role: 'registered' }, TEST_JWT_SECRET, {
+      expiresIn: '15m',
+    });
   });
 
   afterAll(async () => {
     await dataSource.query(`
-        DELETE
-        FROM "room_memberships"
-        WHERE room_id IN
-              (SELECT id FROM "rooms" WHERE owner_id = '${ownerId}');
+      DELETE FROM "room_memberships" WHERE room_id IN
+        (SELECT id FROM "rooms" WHERE owner_id = '${ownerId}');
     `);
-    await dataSource.query(`DELETE
-                            FROM "rooms"
-                            WHERE owner_id = '${ownerId}';`);
+    await dataSource.query(
+      `DELETE FROM "rooms" WHERE owner_id = '${ownerId}';`,
+    );
     await dataSource.query(`
-        DELETE
-        FROM "users"
-        WHERE email IN (
-                        'delete-owner@integration-test.com',
-                        'delete-non-owner@integration-test.com'
-            );
+      DELETE FROM "users" WHERE email IN (
+        'join-owner@integration-test.com',
+        'join-joiner@integration-test.com'
+      );
     `);
     await app.close();
   });
@@ -199,73 +195,85 @@ describe('DELETE /rooms/:id (integration)', () => {
   }
 
   describe('200 OK', () => {
-    it('should soft-delete the room for the owner and remove it from the public listing (R-DEL-01)', async () => {
-      const roomId = await createRoom('Room To Delete');
+    it('should create an active membership and increment the member count (R-JOI-01)', async () => {
+      const roomId = await createRoom('Room To Join');
 
-      await request(httpServer)
-        .delete(`/rooms/${roomId}`)
-        .set('Authorization', `Bearer ${ownerToken}`)
+      const response = await request(httpServer)
+        .post(`/rooms/${roomId}/join`)
+        .set('Authorization', `Bearer ${joinerToken}`)
         .expect(200);
 
-      const rawRoom: unknown = await dataSource.query(`
-          SELECT deleted_at
-          FROM "rooms"
-          WHERE id = '${roomId}';
-      `);
-      const rooms = rawRoom as { deleted_at: Date | null }[];
-      expect(rooms[0].deleted_at).not.toBeNull();
+      const body = response.body as RoomBody;
+      expect(body.memberCount).toBe(2); // owner (auto-joined) + joiner
 
-      const listingResponse = await request(httpServer).get('/rooms');
-      const listedIds = (listingResponse.body as { id: string }[]).map(
-        (room) => room.id,
-      );
-      expect(listedIds).not.toContain(roomId);
+      const rawMembership: unknown = await dataSource.query(`
+        SELECT left_at FROM "room_memberships"
+        WHERE room_id = '${roomId}' AND user_id = '${joinerId}';
+      `);
+      const memberships = rawMembership as { left_at: Date | null }[];
+      expect(memberships).toHaveLength(1);
+      expect(memberships[0].left_at).toBeNull();
     });
 
-    it('should preserve room memberships after deletion for audit purposes (R-DEL-03)', async () => {
-      const roomId = await createRoom('Room With Membership History');
+    it('should allow rejoining after a prior membership was left (partial unique index)', async () => {
+      const roomId = await createRoom('Room To Rejoin');
 
-      await request(httpServer)
-        .delete(`/rooms/${roomId}`)
-        .set('Authorization', `Bearer ${ownerToken}`)
+      await dataSource.query(`
+        INSERT INTO "room_memberships" (room_id, user_id, left_at)
+        VALUES ('${roomId}', '${joinerId}', now());
+      `);
+
+      const response = await request(httpServer)
+        .post(`/rooms/${roomId}/join`)
+        .set('Authorization', `Bearer ${joinerToken}`)
         .expect(200);
 
+      const body = response.body as RoomBody;
+      expect(body.memberCount).toBe(2);
+
       const rawMemberships: unknown = await dataSource.query(`
-          SELECT id
-          FROM "room_memberships"
-          WHERE room_id = '${roomId}';
+        SELECT left_at FROM "room_memberships"
+        WHERE room_id = '${roomId}' AND user_id = '${joinerId}'
+        ORDER BY joined_at;
       `);
-      expect((rawMemberships as { id: string }[]).length).toBeGreaterThan(0);
+      const memberships = rawMemberships as { left_at: Date | null }[];
+      expect(memberships).toHaveLength(2);
+      expect(memberships[1].left_at).toBeNull();
     });
   });
 
-  describe('403 Forbidden', () => {
-    it('should reject a deletion attempt from a non-owner (R-DEL-04)', async () => {
-      const roomId = await createRoom('Room Owned By Someone Else');
+  describe('409 Conflict', () => {
+    it('should reject a duplicate active membership (R-JOI-03)', async () => {
+      const roomId = await createRoom('Room For Duplicate Join');
+
+      await request(httpServer)
+        .post(`/rooms/${roomId}/join`)
+        .set('Authorization', `Bearer ${joinerToken}`)
+        .expect(200);
 
       const response = await request(httpServer)
-        .delete(`/rooms/${roomId}`)
-        .set('Authorization', `Bearer ${nonOwnerToken}`)
-        .expect(403);
+        .post(`/rooms/${roomId}/join`)
+        .set('Authorization', `Bearer ${joinerToken}`)
+        .expect(409);
 
       const body = response.body as ErrorBody;
-      expect(body.statusCode).toBe(403);
+      expect(body.statusCode).toBe(409);
     });
   });
 
   describe('404 Not Found', () => {
-    it('should return 404 for a non-existent room', async () => {
+    it('should return 404 for a non-existent room (R-JOI-04)', async () => {
       const response = await request(httpServer)
-        .delete('/rooms/00000000-0000-4000-8000-000000000000')
-        .set('Authorization', `Bearer ${ownerToken}`)
+        .post('/rooms/00000000-0000-4000-8000-000000000000/join')
+        .set('Authorization', `Bearer ${joinerToken}`)
         .expect(404);
 
       const body = response.body as ErrorBody;
       expect(body.statusCode).toBe(404);
     });
 
-    it('should return 404 on a second delete of an already-deleted room (R-DEL-05)', async () => {
-      const roomId = await createRoom('Room To Delete Twice');
+    it('should return 404 for a soft-deleted room', async () => {
+      const roomId = await createRoom('Room To Delete Then Join');
 
       await request(httpServer)
         .delete(`/rooms/${roomId}`)
@@ -273,8 +281,8 @@ describe('DELETE /rooms/:id (integration)', () => {
         .expect(200);
 
       const response = await request(httpServer)
-        .delete(`/rooms/${roomId}`)
-        .set('Authorization', `Bearer ${ownerToken}`)
+        .post(`/rooms/${roomId}/join`)
+        .set('Authorization', `Bearer ${joinerToken}`)
         .expect(404);
 
       const body = response.body as ErrorBody;
@@ -283,10 +291,10 @@ describe('DELETE /rooms/:id (integration)', () => {
   });
 
   describe('401 Unauthorized', () => {
-    it('should reject a request with no Authorization header', async () => {
+    it('should reject a request with no Authorization header (R-JOI-05)', async () => {
       const roomId = await createRoom('Room For Auth Check');
 
-      await request(httpServer).delete(`/rooms/${roomId}`).expect(401);
+      await request(httpServer).post(`/rooms/${roomId}/join`).expect(401);
     });
   });
 });
