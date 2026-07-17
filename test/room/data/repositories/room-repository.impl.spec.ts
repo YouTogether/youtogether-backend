@@ -5,7 +5,10 @@ import { RoomOrmEntity } from '../../../../src/room/data/entities/room.orm-entit
 import { RoomMembershipOrmEntity } from '../../../../src/room/data/entities/room-membership.orm-entity';
 import { CreateRoomParams } from '../../../../src/room/domain/usecases/create-room.params';
 import { UpdateRoomParams } from '../../../../src/room/domain/usecases/update-room.params';
-import { RoomNotFoundFailure } from '../../../../src/room/domain/failures/room.failure';
+import {
+  RoomNotFoundFailure,
+  RoomAlreadyJoinedFailure,
+} from '../../../../src/room/domain/failures/room.failure';
 
 /**
  * Targeted unit tests for RoomRepositoryImpl.
@@ -335,6 +338,119 @@ describe('RoomRepositoryImpl (unit)', () => {
       } as unknown as Repository<RoomOrmEntity>);
 
       await expect(repository.delete('room-uuid')).resolves.toBeUndefined();
+    });
+  });
+
+  describe('join', () => {
+    const ROOM_ID = 'room-uuid';
+    const USER_ID = 'user-uuid';
+    const EXISTING_ROOM = {
+      id: ROOM_ID,
+      name: 'Friday Movie Night',
+      description: 'Weekly watch party',
+      ownerId: 'owner-uuid',
+      isPublic: true,
+      createdAt: new Date('2026-01-01T00:00:00Z'),
+      updatedAt: new Date('2026-01-01T00:00:00Z'),
+    };
+
+    function mockJoinRepositories(options: {
+      room?: typeof EXISTING_ROOM | null;
+      existingActiveMembership?: unknown;
+      saveError?: { code: string };
+      memberCount?: number;
+    }): {
+      roomFindOneMock: jest.Mock;
+      membershipFindOneMock: jest.Mock;
+      membershipCreateMock: jest.Mock;
+      membershipSaveMock: jest.Mock;
+      membershipCountMock: jest.Mock;
+    } {
+      const roomFindOneMock = jest
+        .fn()
+        .mockResolvedValue(
+          options.room === undefined ? EXISTING_ROOM : options.room,
+        );
+      const membershipFindOneMock = jest
+        .fn()
+        .mockResolvedValue(options.existingActiveMembership ?? null);
+      const membershipCreateMock = jest
+        .fn()
+        .mockImplementation((data: unknown) => data);
+      const membershipSaveMock =
+        options.saveError !== undefined
+          ? jest.fn().mockRejectedValue(options.saveError)
+          : jest.fn().mockResolvedValue(undefined);
+      const membershipCountMock = jest
+        .fn()
+        .mockResolvedValue(options.memberCount ?? 1);
+
+      (dataSource.getRepository as jest.Mock).mockImplementation(
+        (entityClass: unknown) => {
+          if (entityClass === RoomMembershipOrmEntity) {
+            return {
+              findOne: membershipFindOneMock,
+              create: membershipCreateMock,
+              save: membershipSaveMock,
+              count: membershipCountMock,
+            } as unknown as Repository<RoomMembershipOrmEntity>;
+          }
+          return {
+            findOne: roomFindOneMock,
+          } as unknown as Repository<RoomOrmEntity>;
+        },
+      );
+
+      return {
+        roomFindOneMock,
+        membershipFindOneMock,
+        membershipCreateMock,
+        membershipSaveMock,
+        membershipCountMock,
+      };
+    }
+
+    it('should throw RoomNotFoundFailure when the room does not exist or is soft-deleted (R-JOI-04)', async () => {
+      mockJoinRepositories({ room: null });
+
+      await expect(repository.join(ROOM_ID, USER_ID)).rejects.toThrow(
+        RoomNotFoundFailure,
+      );
+    });
+
+    it('should throw RoomAlreadyJoinedFailure when an active membership already exists (R-JOI-03, pre-check)', async () => {
+      mockJoinRepositories({
+        existingActiveMembership: { id: 'membership-uuid', leftAt: null },
+      });
+
+      await expect(repository.join(ROOM_ID, USER_ID)).rejects.toThrow(
+        RoomAlreadyJoinedFailure,
+      );
+    });
+
+    it('should throw RoomAlreadyJoinedFailure on a unique constraint violation during insert (race condition defense)', async () => {
+      mockJoinRepositories({ saveError: { code: '23505' } });
+
+      await expect(repository.join(ROOM_ID, USER_ID)).rejects.toThrow(
+        RoomAlreadyJoinedFailure,
+      );
+    });
+
+    it('should propagate an unrelated database error without masking it as RoomAlreadyJoinedFailure', async () => {
+      mockJoinRepositories({ saveError: { code: '23503' } });
+
+      await expect(repository.join(ROOM_ID, USER_ID)).rejects.not.toThrow(
+        RoomAlreadyJoinedFailure,
+      );
+    });
+
+    it('should return the room with the refreshed active member count on success (R-JOI-01)', async () => {
+      mockJoinRepositories({ memberCount: 4 });
+
+      const result = await repository.join(ROOM_ID, USER_ID);
+
+      expect(result.id).toBe(ROOM_ID);
+      expect(result.memberCount).toBe(4);
     });
   });
 });
