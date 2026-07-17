@@ -14,7 +14,7 @@ import { IsJWT } from 'class-validator';
  */
 export class RefreshTokenDto {
   @ApiProperty({
-    description: 'Refresh token JWT previously issued to the client',
+    description: 'The refresh token JWT issued at login or a prior refresh.',
     example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
   })
   @IsJWT({ message: 'refreshToken must be a valid JWT' })

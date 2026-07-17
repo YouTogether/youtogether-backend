@@ -1,12 +1,26 @@
 import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Patch,
+  Post,
+  UseFilters,
+  UseGuards,
+} from '@nestjs/common';
+import {
   ApiBearerAuth,
-  ApiOperation,
-  ApiOkResponse,
+  ApiConflictResponse,
   ApiCreatedResponse,
-  ApiNotFoundResponse,
   ApiForbiddenResponse,
-  ApiUnauthorizedResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 
 import { CreateRoomUseCase } from '../../domain/usecases/create-room.usecase';
@@ -30,19 +44,6 @@ import { JwtAuthGuard } from '../../../auth/presentation/guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../../../auth/presentation/interfaces/authenticated-user.interface';
 import { RoomExceptionFilter } from '../filters/room-exception.filter';
 import { OwnershipGuard } from '../guards/ownership.guard';
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  HttpCode,
-  HttpStatus,
-  Param,
-  Patch,
-  Post,
-  UseFilters,
-  UseGuards,
-} from '@nestjs/common';
 
 /**
  * Controller for the Room bounded context.
@@ -103,15 +104,17 @@ export class RoomController {
    * - 400 Bad Request   — validation failure (missing/oversized name, etc.).
    * - 401 Unauthorized  — missing, invalid, or expired access token.
    */
-  @ApiBearerAuth('access-token')
-  @ApiOperation({
-    summary: 'Create a room (creator becomes owner and first member)',
-  })
-  @ApiCreatedResponse({ type: RoomResponseDto })
-  @ApiUnauthorizedResponse({ description: 'Missing or invalid access token' })
   @Post()
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.CREATED)
+  @ApiBearerAuth('bearer')
+  @ApiOperation({
+    summary: 'Create a room (creator becomes the owner and first member)',
+  })
+  @ApiCreatedResponse({ description: 'Room created.', type: RoomResponseDto })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid, or expired access token.',
+  })
   async create(
     @Body() dto: CreateRoomDto,
     @CurrentUser() user: AuthenticatedUser,
@@ -138,10 +141,16 @@ export class RoomController {
    * HTTP status codes:
    * - 200 OK — list returned (possibly empty).
    */
-  @ApiOperation({ summary: 'List public rooms' })
-  @ApiOkResponse({ type: [RoomResponseDto] })
   @Get()
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'List public, active rooms with their active member count',
+  })
+  @ApiOkResponse({
+    description: 'Public room listing.',
+    type: RoomResponseDto,
+    isArray: true,
+  })
   async findAll(): Promise<RoomResponseDto[]> {
     const rooms = await this.getPublicRoomsUseCase.execute();
 
@@ -165,11 +174,13 @@ export class RoomController {
    * - 404 Not Found   — the room does not exist or is soft-deleted
    *   ({@link RoomNotFoundFailure}, mapped by {@link RoomExceptionFilter}).
    */
-  @ApiOperation({ summary: 'Retrieve a room by id' })
-  @ApiOkResponse({ type: RoomResponseDto })
-  @ApiNotFoundResponse({ description: 'Room does not exist or was deleted' })
   @Get(':id')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: "Get a room's details" })
+  @ApiOkResponse({ description: 'Room found.', type: RoomResponseDto })
+  @ApiNotFoundResponse({
+    description: 'The room does not exist or is deleted.',
+  })
   async findOne(@Param('id') id: string): Promise<RoomResponseDto> {
     const room = await this.getRoomByIdUseCase.execute(
       new GetRoomByIdParams({ roomId: id }),
@@ -195,16 +206,23 @@ export class RoomController {
    *   {@link RoomExceptionFilter} — see that guard's own documentation).
    * - 404 Not Found     — the room does not exist or is soft-deleted.
    */
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Update room name and/or description (owner only)' })
-  @ApiOkResponse({ type: RoomResponseDto })
-  @ApiForbiddenResponse({
-    description: 'Authenticated user is not the room owner',
-  })
-  @ApiNotFoundResponse({ description: 'Room does not exist or was deleted' })
   @Patch(':id')
   @UseGuards(JwtAuthGuard, OwnershipGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('bearer')
+  @ApiOperation({
+    summary: "Update a room's name and/or description (owner only)",
+  })
+  @ApiOkResponse({ description: 'Room updated.', type: RoomResponseDto })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid, or expired access token.',
+  })
+  @ApiForbiddenResponse({
+    description: 'The authenticated user is not the room owner.',
+  })
+  @ApiNotFoundResponse({
+    description: 'The room does not exist or is deleted.',
+  })
   async update(
     @Param('id') id: string,
     @Body() dto: UpdateRoomDto,
@@ -239,14 +257,21 @@ export class RoomController {
    *   (in practice, always caught by {@link OwnershipGuard} itself,
    *   whose `findOwnerId` lookup excludes soft-deleted rows).
    */
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Soft-delete a room (owner only)' })
-  @ApiForbiddenResponse({
-    description: 'Authenticated user is not the room owner',
-  })
   @Delete(':id')
   @UseGuards(JwtAuthGuard, OwnershipGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('bearer')
+  @ApiOperation({ summary: 'Soft-delete a room (owner only)' })
+  @ApiOkResponse({ description: 'Room deleted.' })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid, or expired access token.',
+  })
+  @ApiForbiddenResponse({
+    description: 'The authenticated user is not the room owner.',
+  })
+  @ApiNotFoundResponse({
+    description: 'The room does not exist or was already deleted.',
+  })
   async remove(@Param('id') id: string): Promise<void> {
     await this.deleteRoomUseCase.execute(new DeleteRoomParams({ roomId: id }));
   }
@@ -267,11 +292,21 @@ export class RoomController {
    *   this room ({@link RoomAlreadyJoinedFailure}). Rejoining after
    *   having left is allowed — see that failure's own documentation.
    */
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Join a room as a member' })
   @Post(':id/join')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('bearer')
+  @ApiOperation({ summary: 'Join a room as an active member' })
+  @ApiOkResponse({ description: 'Membership created.', type: RoomResponseDto })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid, or expired access token.',
+  })
+  @ApiNotFoundResponse({
+    description: 'The room does not exist or is deleted.',
+  })
+  @ApiConflictResponse({
+    description: 'The user already holds an active membership in this room.',
+  })
   async join(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,
@@ -299,11 +334,22 @@ export class RoomController {
    * - 404 Not Found     — the room does not exist, or the user holds no
    *   active membership in it ({@link RoomMembershipNotFoundFailure}).
    */
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Leave a room' })
   @Post(':id/leave')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('bearer')
+  @ApiOperation({ summary: 'Leave a room (non-owner members only)' })
+  @ApiOkResponse({ description: 'Membership ended.' })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid, or expired access token.',
+  })
+  @ApiForbiddenResponse({
+    description: 'The room owner cannot leave; delete the room instead.',
+  })
+  @ApiNotFoundResponse({
+    description:
+      'The room does not exist, or the user holds no active membership.',
+  })
   async leave(
     @Param('id') id: string,
     @CurrentUser() user: AuthenticatedUser,

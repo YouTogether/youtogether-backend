@@ -25,7 +25,7 @@ export class LoginDto {
    * Minimum length of 1 character to reject empty strings.
    * The bcrypt comparison handles the actual credential check.
    */
-  @ApiProperty({ example: 'securePassword123' })
+  @ApiProperty({ example: 'a-secure-passphrase' })
   @IsString({ message: 'password must be a string' })
   @MinLength(1, { message: 'password must not be empty' })
   password!: string;

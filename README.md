@@ -15,6 +15,7 @@ Project management artifacts and planning documents are maintained in [`youtoget
 - [Prerequisites](#prerequisites)
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
+- [API Documentation](#api-documentation)
 - [Git Hooks](#git-hooks)
 - [Running Tests](#running-tests)
 - [CI Pipeline](#ci-pipeline)
@@ -48,32 +49,47 @@ All implementations follow **Test-Driven Development** (tests written before pro
 
 ## Bounded Contexts
 
-| Context | Scope |
-|---|---|
-| **Authentication** | Account registration, login, password hashing, JWT issuance and refresh, logout |
-| **Room** | Room creation, listing, membership, ownership enforcement, CRUD operations |
+| Context                   | Scope                                                                                |
+|---------------------------|--------------------------------------------------------------------------------------|
+| **Authentication**        | Account registration, login, password hashing, JWT issuance and refresh, logout      |
+| **Room**                  | Room creation, listing, membership, ownership enforcement, CRUD operations           |
 | **Video Synchronisation** | Playback event forwarding, Firebase Realtime Database integration, presence tracking |
 
 ---
 
 ## Prerequisites
+| Tool       | Version              | Notes                                                                                          |
+|------------|----------------------|------------------------------------------------------------------------------------------------|
+| Node.js    | 22.20.0 LTS          | [Installation guide](https://nodejs.org/)                                                      |
+| npm        | Bundled with Node.js | —                                                                                              |
+| PostgreSQL | 16.x                 | Installed and running natively (see below). No containerization is used for local development. |
+| lefthook   | Latest               | Git hooks manager — see [Git Hooks](#git-hooks)                                                |
 
-| Tool | Version | Notes |
-|---|---|---|
-| Node.js | 20.x LTS | [Installation guide](https://nodejs.org/) |
-| npm | Bundled with Node.js | — |
-| PostgreSQL | 16.x | Local instance or Docker (see below) |
-| lefthook | Latest | Git hooks manager — see [Git Hooks](#git-hooks) |
+> **Note:** this project does not currently provide a Docker setup. PostgreSQL must be installed
+> natively on your machine, and the API runs locally via `npm run start:dev`. Containerization is
+> not implemented at this stage.
 
-To start a local PostgreSQL instance via Docker:
+Install PostgreSQL 16.x natively for your OS ([official downloads](https://www.postgresql.org/download/)),
+then create the database referenced by your `.env` (`DB_DATABASE`, default `youtogether`).
 
 ```bash
-docker run --name youtogether-db \
-  -e POSTGRES_USER=youtogether \
-  -e POSTGRES_PASSWORD=youtogether_dev \
-  -e POSTGRES_DB=youtogether_dev \
-  -p 5432:5432 \
-  -d postgres:16-alpine
+# macOS
+brew install postgresql@16
+brew services start postgresql@16
+
+# Ubuntu / Debian
+sudo apt install postgresql-16
+sudo systemctl start postgresql
+
+# Windows
+# Use the official installer: https://www.postgresql.org/download/windows/
+```
+
+Then create the local database and user matching your `.env`:
+
+```bash
+psql postgres -c "CREATE USER youtogether WITH PASSWORD 'youtogether_dev';"
+psql postgres -c "CREATE DATABASE youtogether OWNER youtogether;"
 ```
 
 ---
@@ -101,7 +117,8 @@ npm run migration:run
 npm run start:dev
 ```
 
-The API will be available at `http://localhost:3000` by default.
+The API will be available at `http://localhost:3000/api/v1` by default (URI-based versioning).
+Interactive Swagger documentation is served, unversioned, at `http://localhost:3000/api-docs`.
 
 ---
 
@@ -111,17 +128,30 @@ All environment variables are defined in `.env`.
 Copy `.env.example` as a starting point. 
 The `.env` file is listed in `.gitignore` and must never be committed.
 
-| Variable | Description |
-|---|---|
-| `DATABASE_URL` | PostgreSQL connection string |
-| `JWT_SECRET` | Secret used to sign access tokens |
-| `JWT_REFRESH_SECRET` | Secret used to sign refresh tokens |
-| `JWT_EXPIRATION` | Access token expiration (e.g. `15m`) |
+| Variable                 | Description                          |
+|--------------------------|--------------------------------------|
+| `DATABASE_URL`           | PostgreSQL connection string         |
+| `JWT_SECRET`             | Secret used to sign access tokens    |
+| `JWT_REFRESH_SECRET`     | Secret used to sign refresh tokens   |
+| `JWT_EXPIRATION`         | Access token expiration (e.g. `15m`) |
 | `JWT_REFRESH_EXPIRATION` | Refresh token expiration (e.g. `7d`) |
-| `FIREBASE_PROJECT_ID` | Firebase project identifier |
-| `FIREBASE_CLIENT_EMAIL` | Firebase service account email |
-| `FIREBASE_PRIVATE_KEY` | Firebase service account private key |
-| `PORT` | HTTP port (default: `3000`) |
+| `FIREBASE_PROJECT_ID`    | Firebase project identifier          |
+| `FIREBASE_CLIENT_EMAIL`  | Firebase service account email       |
+| `FIREBASE_PRIVATE_KEY`   | Firebase service account private key |
+| `PORT`                   | HTTP port (default: `3000`)          |
+
+---
+
+
+## API Documentation
+
+The full REST API contract (Authentication and Room bounded contexts) is described via an
+OpenAPI 3.0 document, generated directly from the DTOs and controllers using
+[`@nestjs/swagger`](https://docs.nestjs.com/openapi/introduction). This guarantees the
+documentation cannot drift from the actual implementation.
+
+Once the development server is running (`npm run start:dev`), the interactive Swagger UI
+is available at:
 
 ---
 
@@ -150,11 +180,11 @@ This command must be run once after each fresh clone. It is not automatic.
 
 ### Active Hooks
 
-| Hook | Trigger | Behaviour |
-|---|---|---|
+| Hook         | Trigger      | Behavior                                                                   |
+|--------------|--------------|-----------------------------------------------------------------------------|
 | `commit-msg` | Every commit | Validates the commit message against the Conventional Commits specification |
-| `pre-commit` | Every commit | Runs ESLint on staged `.ts` and `.js` files only |
-| `pre-push` | Every push | Validates the branch name against the project naming convention |
+| `pre-commit` | Every commit | Runs ESLint on staged `.ts` and `.js` files only                            |
+| `pre-push`   | Every push   | Validates the branch name against the project naming convention             |
 
 ### Commit Message Convention
 
@@ -247,12 +277,12 @@ End-to-end test files are located in the `test/` directory at the project root.
 The CI pipeline runs on every push to `main` and on every pull request targeting `main`. 
 It is defined in `.github/workflows/ci.yml`.
 
-| Job | Description | Blocks merge |
-|---|---|---|
-| `lint` | ESLint + TypeScript compilation check | Yes |
-| `test-unit` | Jest unit tests with coverage artefact | Yes |
-| `test-e2e` | End-to-end tests against a PostgreSQL service container | Yes |
-| `build` | Production bundle compilation (main branch only) | No |
+| Job         | Description                                             | Blocks merge |
+|-------------|---------------------------------------------------------|--------------|
+| `lint`      | ESLint + TypeScript compilation check                   | Yes          |
+| `test-unit` | Jest unit tests with coverage artefact                  | Yes          |
+| `test-e2e`  | End-to-end tests against a PostgreSQL service container | Yes          |
+| `build`     | Production bundle compilation (main branch only)        | No           |
 
 All jobs in the `lint`, `test-unit`, and `test-e2e` stages must pass before a pull request is eligible for merge. 
 This is enforced by the branch protection ruleset on `main`.
@@ -282,12 +312,12 @@ This repository provides structured issue templates to ensure consistency across
 
 ### Available Templates
 
-| Template | Use for |
-|---|---|
-| **Epic** | A high-level feature area grouping multiple related issues |
-| **Feature** | A user story or use case to implement |
-| **Task** | A technical sub-task of a feature |
-| **Bug Report** | A defect or regression |
+| Template       | Use for                                                    |
+|----------------|------------------------------------------------------------|
+| **Epic**       | A high-level feature area grouping multiple related issues |
+| **Feature**    | A user story or use case to implement                      |
+| **Task**       | A technical sub-task of a feature                          |
+| **Bug Report** | A defect or regression                                     |
 
 To create an issue, navigate to the **Issues** tab and click **New issue**. 
 Select the appropriate template. All mandatory fields must be completed before the issue is submitted.
@@ -320,20 +350,20 @@ Priority and Risk Level are managed as project-level custom fields on the GitHub
 
 **Type labels:**
 
-| Label | Usage |
-|---|---|
-| `epic` | High-level feature grouping |
-| `feature` | User story or use case |
-| `task` | Technical sub-task |
-| `bug` | Defect or regression |
-| `test` | Test-only issue |
-| `docs` | Documentation |
-| `infra` | Infrastructure or tooling |
+| Label     | Usage                       |
+|-----------|-----------------------------|
+| `epic`    | High-level feature grouping |
+| `feature` | User story or use case      |
+| `task`    | Technical sub-task          |
+| `bug`     | Defect or regression        |
+| `test`    | Test-only issue             |
+| `docs`    | Documentation               |
+| `infra`   | Infrastructure or tooling   |
 
 **Bounded context labels:**
 
-| Label | Usage |
-|---|---|
-| `auth` | Authentication bounded context |
-| `room` | Room bounded context |
+| Label        | Usage                                 |
+|--------------|---------------------------------------|
+| `auth`       | Authentication bounded context        |
+| `room`       | Room bounded context                  |
 | `video-sync` | Video Synchronisation bounded context |

@@ -11,6 +11,7 @@ import {
 import {
   ApiBearerAuth,
   ApiConflictResponse,
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -83,15 +84,14 @@ export class AuthController {
    * - 400 Bad Request   — validation failure.
    * - 409 Conflict      — email already registered.
    */
-  @ApiOperation({ summary: 'Register a new user account' })
-  @ApiOkResponse({
-    status: 201,
-    description: 'Registration successful',
-    type: AuthResponseDto,
-  })
-  @ApiConflictResponse({ description: 'Email already registered' })
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Register a new user account' })
+  @ApiCreatedResponse({
+    description: 'Registration successful.',
+    type: AuthResponseDto,
+  })
+  @ApiConflictResponse({ description: 'The email is already registered.' })
   async register(@Body() dto: RegisterDto): Promise<AuthResponseDto> {
     const result = await this.registerUseCase.execute(
       new RegisterParams({
@@ -114,14 +114,14 @@ export class AuthController {
    * - 400 Bad Request    — validation failure (missing/invalid fields).
    * - 401 Unauthorized   — invalid credentials (generic message, no field detail).
    */
-  @ApiOperation({ summary: 'Authenticate with email and password' })
-  @ApiOkResponse({
-    description: 'Authentication successful',
-    type: AuthResponseDto,
-  })
-  @ApiUnauthorizedResponse({ description: 'Invalid credentials' })
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Authenticate with email and password' })
+  @ApiOkResponse({
+    description: 'Authentication successful.',
+    type: AuthResponseDto,
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid credentials.' })
   async login(@Body() dto: LoginDto): Promise<AuthResponseDto> {
     const result = await this.loginUseCase.execute(
       new LoginParams({
@@ -145,13 +145,16 @@ export class AuthController {
    * - 400 Bad Request  — malformed token (fails JWT structural validation).
    * - 401 Unauthorized — invalid, expired, or already-used (replayed) token.
    */
-  @ApiOperation({ summary: 'Rotate the session using a valid refresh token' })
-  @ApiOkResponse({ description: 'Rotation successful', type: AuthResponseDto })
-  @ApiUnauthorizedResponse({
-    description: 'Invalid, expired, or already-used refresh token',
-  })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Rotate the session using a refresh token' })
+  @ApiOkResponse({
+    description: 'Rotation successful; a new token pair is returned.',
+    type: AuthResponseDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Invalid, expired, or already-used (replayed) refresh token.',
+  })
   async refresh(@Body() dto: RefreshTokenDto): Promise<AuthResponseDto> {
     const result = await this.refreshUseCase.execute(
       new RefreshParams({ refreshToken: dto.refreshToken }),
@@ -178,15 +181,15 @@ export class AuthController {
    * - 200 OK           — session terminated (or was already inactive).
    * - 401 Unauthorized — missing, invalid, or expired access token.
    */
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Terminate the current session' })
-  @ApiOkResponse({ description: 'Session terminated' })
-  @ApiUnauthorizedResponse({
-    description: 'Missing, invalid, or expired access token',
-  })
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('bearer')
+  @ApiOperation({ summary: 'Terminate the current session' })
+  @ApiOkResponse({ description: 'Session terminated.' })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid, or expired access token.',
+  })
   async logout(@CurrentUser() user: AuthenticatedUser): Promise<void> {
     await this.logoutUseCase.execute(new LogoutParams({ userId: user.userId }));
   }
@@ -209,15 +212,18 @@ export class AuthController {
    * - 401 Unauthorized — missing, invalid, or expired access token, or the
    *   token's user no longer resolves to an active account.
    */
-  @ApiBearerAuth('access-token')
-  @ApiOperation({ summary: 'Retrieve the authenticated user profile' })
-  @ApiOkResponse({ description: 'Profile returned', type: UserProfileDto })
-  @ApiUnauthorizedResponse({
-    description: 'Missing, invalid, or expired access token',
-  })
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('bearer')
+  @ApiOperation({ summary: "Get the authenticated user's current profile" })
+  @ApiOkResponse({
+    description: 'Profile returned.',
+    type: UserProfileDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid, or expired access token.',
+  })
   async me(@CurrentUser() user: AuthenticatedUser): Promise<UserProfileDto> {
     const currentUser = await this.getCurrentUserUseCase.execute(
       new GetCurrentUserParams({ userId: user.userId }),

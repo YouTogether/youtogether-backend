@@ -19,8 +19,8 @@ import { UserRole } from '../../domain/enums/user-role.enum';
  * A partial unique index on `email` ensures uniqueness among active (non-deleted)
  * users while allowing the same email to be reused after soft deletion.
  *
- * @see Data Model Specification §2.1.1 — User Aggregate
- * @see Interface Contracts v1.1 §3.1.1 — IAuthRemoteDataSource
+ * @see User Aggregate
+ * @see IAuthRemoteDataSource
  */
 @Entity('users')
 @Index('IDX_users_email_active', ['email'], {
