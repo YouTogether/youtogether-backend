@@ -3,6 +3,7 @@ import {
   Catch,
   ConflictException,
   ExceptionFilter,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { Response } from 'express';
@@ -10,6 +11,8 @@ import { Response } from 'express';
 import {
   RoomNotFoundFailure,
   RoomAlreadyJoinedFailure,
+  RoomMembershipNotFoundFailure,
+  RoomOwnerCannotLeaveFailure,
 } from '../../domain/failures/room.failure';
 
 /**
@@ -22,7 +25,9 @@ import {
  *
  * Mappings:
  * - {@link RoomNotFoundFailure} -> 404 Not Found
+ * - {@link RoomMembershipNotFoundFailure} -> 404 Not Found
  * - {@link RoomAlreadyJoinedFailure} -> 409 Conflict
+ * - {@link RoomOwnerCannotLeaveFailure} -> 403 Forbidden
  *
  * Apply via `@UseFilters(RoomExceptionFilter)` at the controller level.
  * New Room domain failures are registered here as the
@@ -34,22 +39,39 @@ import {
  * @see RoomController
  * @competency Separation of concerns; domain does not depend on HTTP
  */
-@Catch(RoomNotFoundFailure, RoomAlreadyJoinedFailure)
+type RoomDomainFailure =
+  | RoomNotFoundFailure
+  | RoomMembershipNotFoundFailure
+  | RoomAlreadyJoinedFailure
+  | RoomOwnerCannotLeaveFailure;
+
+@Catch(
+  RoomNotFoundFailure,
+  RoomMembershipNotFoundFailure,
+  RoomAlreadyJoinedFailure,
+  RoomOwnerCannotLeaveFailure,
+)
 export class RoomExceptionFilter implements ExceptionFilter {
-  catch(
-    exception: RoomNotFoundFailure | RoomAlreadyJoinedFailure,
-    host: ArgumentsHost,
-  ): void {
+  catch(exception: RoomDomainFailure, host: ArgumentsHost): void {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
 
-    const httpException =
-      exception instanceof RoomAlreadyJoinedFailure
-        ? new ConflictException(exception.message)
-        : new NotFoundException(exception.message);
+    const httpException = this.toHttpException(exception);
 
     response
       .status(httpException.getStatus())
       .json(httpException.getResponse());
+  }
+
+  private toHttpException(
+    exception: RoomDomainFailure,
+  ): ConflictException | ForbiddenException | NotFoundException {
+    if (exception instanceof RoomAlreadyJoinedFailure) {
+      return new ConflictException(exception.message);
+    }
+    if (exception instanceof RoomOwnerCannotLeaveFailure) {
+      return new ForbiddenException(exception.message);
+    }
+    return new NotFoundException(exception.message);
   }
 }
