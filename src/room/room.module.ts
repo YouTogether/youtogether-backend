@@ -11,6 +11,7 @@ import { GetPublicRoomsUseCase } from './domain/usecases/get-public-rooms.usecas
 import { GetRoomByIdUseCase } from './domain/usecases/get-room-by-id.usecase';
 import { UpdateRoomUseCase } from './domain/usecases/update-room.usecase';
 import { DeleteRoomUseCase } from './domain/usecases/delete-room.usecase';
+import { JoinRoomUseCase } from './domain/usecases/join-room.usecase';
 import { OwnershipGuard } from './presentation/guards/ownership.guard';
 import { RoomController } from './presentation/controllers/room.controller';
 
@@ -38,6 +39,7 @@ import { RoomController } from './presentation/controllers/room.controller';
     GetRoomByIdUseCase,
     UpdateRoomUseCase,
     DeleteRoomUseCase,
+    JoinRoomUseCase,
     OwnershipGuard,
     {
       provide: IRoomRepository,

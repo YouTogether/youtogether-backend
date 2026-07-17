@@ -21,6 +21,8 @@ import { UpdateRoomUseCase } from '../../domain/usecases/update-room.usecase';
 import { UpdateRoomParams } from '../../domain/usecases/update-room.params';
 import { DeleteRoomUseCase } from '../../domain/usecases/delete-room.usecase';
 import { DeleteRoomParams } from '../../domain/usecases/delete-room.params';
+import { JoinRoomUseCase } from '../../domain/usecases/join-room.usecase';
+import { JoinRoomParams } from '../../domain/usecases/join-room.params';
 import { CreateRoomDto } from '../dtos/create-room.dto';
 import { UpdateRoomDto } from '../dtos/update-room.dto';
 import { RoomResponseDto } from '../dtos/room-response.dto';
@@ -42,17 +44,19 @@ import { OwnershipGuard } from '../guards/ownership.guard';
  * authentication logic for this module.
  *
  * Routes:
- * - POST   /rooms      -> {@link CreateRoomUseCase} (protected by {@link JwtAuthGuard})
- * - GET    /rooms      -> {@link GetPublicRoomsUseCase} (no authentication required)
- * - GET    /rooms/:id  -> {@link GetRoomByIdUseCase} (no authentication required)
- * - PATCH  /rooms/:id  -> {@link UpdateRoomUseCase} (protected by {@link JwtAuthGuard}, {@link OwnershipGuard})
- * - DELETE /rooms/:id  -> {@link DeleteRoomUseCase} (protected by {@link JwtAuthGuard}, {@link OwnershipGuard})
+ * - POST   /rooms           -> {@link CreateRoomUseCase} (protected by {@link JwtAuthGuard})
+ * - GET    /rooms           -> {@link GetPublicRoomsUseCase} (no authentication required)
+ * - GET    /rooms/:id       -> {@link GetRoomByIdUseCase} (no authentication required)
+ * - PATCH  /rooms/:id       -> {@link UpdateRoomUseCase} (protected by {@link JwtAuthGuard}, {@link OwnershipGuard})
+ * - DELETE /rooms/:id       -> {@link DeleteRoomUseCase} (protected by {@link JwtAuthGuard}, {@link OwnershipGuard})
+ * - POST   /rooms/:id/join  -> {@link JoinRoomUseCase} (protected by {@link JwtAuthGuard})
  *
  * @see CreateRoomUseCase
  * @see GetPublicRoomsUseCase
  * @see GetRoomByIdUseCase
  * @see UpdateRoomUseCase
  * @see DeleteRoomUseCase
+ * @see JoinRoomUseCase
  * @see RoomExceptionFilter
  */
 @Controller('rooms')
@@ -64,6 +68,7 @@ export class RoomController {
     private readonly getRoomByIdUseCase: GetRoomByIdUseCase,
     private readonly updateRoomUseCase: UpdateRoomUseCase,
     private readonly deleteRoomUseCase: DeleteRoomUseCase,
+    private readonly joinRoomUseCase: JoinRoomUseCase,
   ) {}
 
   /**
@@ -205,5 +210,35 @@ export class RoomController {
   @HttpCode(HttpStatus.OK)
   async remove(@Param('id') id: string): Promise<void> {
     await this.deleteRoomUseCase.execute(new DeleteRoomParams({ roomId: id }));
+  }
+
+  /**
+   * POST /rooms/:id/join
+   *
+   * Creates an active membership for the authenticated user in the given
+   * room. Any authenticated user may join any existing, non-deleted room
+   * — no ownership check here, unlike `PATCH`/`DELETE`.
+   *
+   * HTTP status codes:
+   * - 200 OK            — membership created; response includes the
+   *   refreshed active member count.
+   * - 401 Unauthorized  — missing, invalid, or expired access token.
+   * - 404 Not Found     — the room does not exist or is soft-deleted.
+   * - 409 Conflict      — the user already holds an active membership in
+   *   this room ({@link RoomAlreadyJoinedFailure}). Rejoining after
+   *   having left is allowed — see that failure's own documentation.
+   */
+  @Post(':id/join')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async join(
+    @Param('id') id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<RoomResponseDto> {
+    const room = await this.joinRoomUseCase.execute(
+      new JoinRoomParams({ roomId: id, userId: user.userId }),
+    );
+
+    return RoomResponseDto.fromRoomEntity(room);
   }
 }
