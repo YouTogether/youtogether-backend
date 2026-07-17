@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
 
 /**
@@ -16,10 +17,11 @@ import { IsEmail, IsString, MaxLength, MinLength } from 'class-validator';
  * @competency Input validation as a security measure (OWASP A03:2021)
  */
 export class RegisterDto {
-  /**
-   * User email address.
-   * Must be a valid RFC 5322 email and at most 255 characters.
-   */
+  @ApiProperty({
+    description: 'User email address (RFC 5322 format)',
+    example: 'jane.doe@example.com',
+    maxLength: 255,
+  })
   @IsEmail({}, { message: 'email must be a valid email address' })
   @MaxLength(255, { message: 'email must not exceed 255 characters' })
   email!: string;
@@ -28,6 +30,11 @@ export class RegisterDto {
    * User plaintext password.
    * Must be at least 8 characters. Hashed server-side before storage.
    */
+  @ApiProperty({
+    description: 'Plaintext password, hashed server-side before storage',
+    example: 'securePassword123',
+    minLength: 8,
+  })
   @IsString({ message: 'password must be a string' })
   @MinLength(8, { message: 'password must be at least 8 characters' })
   password!: string;
@@ -36,6 +43,11 @@ export class RegisterDto {
    * User display name.
    * Must be a non-empty string of at most 50 characters.
    */
+  @ApiProperty({
+    description: 'Display name',
+    example: 'jane_doe',
+    maxLength: 50,
+  })
   @IsString({ message: 'username must be a string' })
   @MinLength(1, { message: 'username must not be empty' })
   @MaxLength(50, { message: 'username must not exceed 50 characters' })
