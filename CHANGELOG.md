@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.0](https://github.com/YouTogether/youtogether-backend/compare/v0.9.0...v0.10.0) (2026-07-17)
+
+
+### Features
+
+* **room:** [B-R07-T1] leave room endpoint POST /rooms/:id/leave ([#54](https://github.com/YouTogether/youtogether-backend/issues/54)) ([3a6dec6](https://github.com/YouTogether/youtogether-backend/commit/3a6dec693c3d3737a407c74f82731164df4ca124))
+
 ## [0.9.0](https://github.com/YouTogether/youtogether-backend/compare/v0.8.0...v0.9.0) (2026-07-17)
 
 
