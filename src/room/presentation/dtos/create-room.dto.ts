@@ -5,6 +5,7 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
  * Data Transfer Object for the POST /rooms endpoint.
@@ -30,6 +31,7 @@ export class CreateRoomDto {
    * Public display name of the room.
    * Must be a non-empty string of at most 100 characters.
    */
+  @ApiProperty({ example: 'Friday Movie Night', minLength: 1, maxLength: 100 })
   @IsString({ message: 'name must be a string' })
   @MinLength(1, { message: 'name must not be empty' })
   @MaxLength(100, { message: 'name must not exceed 100 characters' })
@@ -38,6 +40,7 @@ export class CreateRoomDto {
   /**
    * Optional short description of the room.
    */
+  @ApiPropertyOptional({ example: 'Weekly watch party' })
   @IsOptional()
   @IsString({ message: 'description must be a string' })
   description?: string;
@@ -46,6 +49,7 @@ export class CreateRoomDto {
    * Whether the room appears in the public listing.
    * Defaults to `true` when omitted.
    */
+  @ApiPropertyOptional({ default: true })
   @IsOptional()
   @IsBoolean({ message: 'isPublic must be a boolean' })
   isPublic?: boolean;

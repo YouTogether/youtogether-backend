@@ -1,4 +1,5 @@
 import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
  * Data Transfer Object for the PATCH /rooms/:id endpoint.
@@ -22,6 +23,11 @@ export class UpdateRoomDto {
   /**
    * New display name for the room, if changing it.
    */
+  @ApiPropertyOptional({
+    example: 'Renamed Movie Night',
+    minLength: 1,
+    maxLength: 100,
+  })
   @IsOptional()
   @IsString({ message: 'name must be a string' })
   @MinLength(1, { message: 'name must not be empty' })
@@ -31,6 +37,7 @@ export class UpdateRoomDto {
   /**
    * New description for the room, if changing it.
    */
+  @ApiPropertyOptional({ example: 'Updated description' })
   @IsOptional()
   @IsString({ message: 'description must be a string' })
   description?: string;

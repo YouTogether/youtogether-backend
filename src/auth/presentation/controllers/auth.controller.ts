@@ -8,6 +8,15 @@ import {
   UseFilters,
   UseGuards,
 } from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiConflictResponse,
+  ApiCreatedResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger';
 
 import { GetCurrentUserUseCase } from '../../domain/usecases/get-current-user.usecase';
 import { GetCurrentUserParams } from '../../domain/usecases/get-current-user.params';
@@ -53,6 +62,7 @@ import { AuthenticatedUser } from '../interfaces/authenticated-user.interface';
  * @see GetCurrentUserUseCase
  * @see DomainExceptionFilter
  */
+@ApiTags('Authentication')
 @Controller('auth')
 @UseFilters(DomainExceptionFilter)
 export class AuthController {
@@ -76,6 +86,12 @@ export class AuthController {
    */
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Register a new user account' })
+  @ApiCreatedResponse({
+    description: 'Registration successful.',
+    type: AuthResponseDto,
+  })
+  @ApiConflictResponse({ description: 'The email is already registered.' })
   async register(@Body() dto: RegisterDto): Promise<AuthResponseDto> {
     const result = await this.registerUseCase.execute(
       new RegisterParams({
@@ -100,6 +116,12 @@ export class AuthController {
    */
   @Post('login')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Authenticate with email and password' })
+  @ApiOkResponse({
+    description: 'Authentication successful.',
+    type: AuthResponseDto,
+  })
+  @ApiUnauthorizedResponse({ description: 'Invalid credentials.' })
   async login(@Body() dto: LoginDto): Promise<AuthResponseDto> {
     const result = await this.loginUseCase.execute(
       new LoginParams({
@@ -125,6 +147,14 @@ export class AuthController {
    */
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Rotate the session using a refresh token' })
+  @ApiOkResponse({
+    description: 'Rotation successful; a new token pair is returned.',
+    type: AuthResponseDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Invalid, expired, or already-used (replayed) refresh token.',
+  })
   async refresh(@Body() dto: RefreshTokenDto): Promise<AuthResponseDto> {
     const result = await this.refreshUseCase.execute(
       new RefreshParams({ refreshToken: dto.refreshToken }),
@@ -154,6 +184,12 @@ export class AuthController {
   @Post('logout')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('bearer')
+  @ApiOperation({ summary: 'Terminate the current session' })
+  @ApiOkResponse({ description: 'Session terminated.' })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid, or expired access token.',
+  })
   async logout(@CurrentUser() user: AuthenticatedUser): Promise<void> {
     await this.logoutUseCase.execute(new LogoutParams({ userId: user.userId }));
   }
@@ -179,6 +215,15 @@ export class AuthController {
   @Get('me')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('bearer')
+  @ApiOperation({ summary: "Get the authenticated user's current profile" })
+  @ApiOkResponse({
+    description: 'Profile returned.',
+    type: UserProfileDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid, or expired access token.',
+  })
   async me(@CurrentUser() user: AuthenticatedUser): Promise<UserProfileDto> {
     const currentUser = await this.getCurrentUserUseCase.execute(
       new GetCurrentUserParams({ userId: user.userId }),

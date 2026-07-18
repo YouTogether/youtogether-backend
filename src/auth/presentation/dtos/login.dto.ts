@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { IsEmail, IsString, MinLength } from 'class-validator';
 
 /**
@@ -15,6 +16,7 @@ export class LoginDto {
    * User email address.
    * Must be a valid email format to prevent unnecessary database queries.
    */
+  @ApiProperty({ example: 'jane.doe@example.com' })
   @IsEmail({}, { message: 'email must be a valid email address' })
   email!: string;
 
@@ -23,6 +25,7 @@ export class LoginDto {
    * Minimum length of 1 character to reject empty strings.
    * The bcrypt comparison handles the actual credential check.
    */
+  @ApiProperty({ example: 'a-secure-passphrase' })
   @IsString({ message: 'password must be a string' })
   @MinLength(1, { message: 'password must not be empty' })
   password!: string;

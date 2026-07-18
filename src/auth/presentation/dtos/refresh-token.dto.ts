@@ -1,3 +1,4 @@
+import { ApiProperty } from '@nestjs/swagger';
 import { IsJWT } from 'class-validator';
 
 /**
@@ -12,6 +13,10 @@ import { IsJWT } from 'class-validator';
  * @competency Input format validation before domain logic
  */
 export class RefreshTokenDto {
+  @ApiProperty({
+    description: 'The refresh token JWT issued at login or a prior refresh.',
+    example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+  })
   @IsJWT({ message: 'refreshToken must be a valid JWT' })
   refreshToken!: string;
 }
