@@ -139,6 +139,7 @@ The `.env` file is listed in `.gitignore` and must never be committed.
 | `FIREBASE_CLIENT_EMAIL`  | Firebase service account email       |
 | `FIREBASE_PRIVATE_KEY`   | Firebase service account private key |
 | `PORT`                   | HTTP port (default: `3000`)          |
+| `CORS_ORIGIN`            | Allowed origins for CORS request     |
 
 ---
 

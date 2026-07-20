@@ -28,9 +28,38 @@ import { AppModule } from './app.module';
  *   routing, so `/api-docs` is deliberately unaffected by both the
  *   global prefix and the versioning scheme — the documentation itself
  *   is not versioned.
+ * - **CORS**: `enableCors()`, required for any browser-based client
+ *   (Flutter web included) served from a different origin than this
+ *   API to receive responses at all — without it, the browser blocks
+ *   them regardless of the API's own logic being correct.
  */
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Flutter web serves on a different origin
+  // (different port) than this API — the browser enforces CORS on every
+  // cross-origin request regardless of HTTP vs HTTPS. `origin: true`
+  // reflects back whatever origin made the request, convenient for local
+  // development where Flutter web's dev server port is not fixed. In
+  // staging/production, restrict this to a known list of allowed
+  // origins via CORS_ORIGIN (comma-separated), rather than leaving it
+  // permissive.
+  //
+  // `credentials: false` because this API authenticates via a Bearer
+  // token in the Authorization header (never via cookies) — there is no
+  // credentialed (cookie-based) cross-origin request to allow here.
+  // `CORS_ORIGIN?.split(',') ?? true` has a footgun: if the env var is
+  // *declared but empty* (e.g. `CORS_ORIGIN=` in a scaffolded .env),
+  // `''.split(',')` returns `['']` — a defined, non-null value — so the
+  // `??` fallback to `true` never triggers, and the origin allowlist
+  // becomes a single empty string that matches nothing, blocking every
+  // request. Checking for a non-empty trimmed value avoids that trap.
+  const rawCorsOrigin = process.env.CORS_ORIGIN?.trim();
+  const corsOrigin =
+    rawCorsOrigin !== undefined && rawCorsOrigin.length > 0
+      ? rawCorsOrigin.split(',').map((origin) => origin.trim())
+      : true;
+  app.enableCors({ origin: corsOrigin, credentials: false });
 
   app.setGlobalPrefix('api');
   app.enableVersioning({
