@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.10.1](https://github.com/YouTogether/youtogether-backend/compare/v0.10.0...v0.10.1) (2026-07-20)
+
+
+### Bug Fixes
+
+* **infra:** [B-INF-T1] enable CORS so browser-based clients on a different origin can reach the API ([#57](https://github.com/YouTogether/youtogether-backend/issues/57)) ([0b1725f](https://github.com/YouTogether/youtogether-backend/commit/0b1725f37cdc1991cdbebb368532c36c77422aa9))
+
 ## [0.10.0](https://github.com/YouTogether/youtogether-backend/compare/v0.9.0...v0.10.0) (2026-07-17)
 
 
