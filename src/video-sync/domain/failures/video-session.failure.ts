@@ -1,0 +1,69 @@
+/**
+ * Thrown when the supplied YouTube video ID does not match the expected
+ * 11-character format.
+ *
+ * This is a defence-in-depth duplicate of `CreateVideoSessionDto`'s own
+ * `@Matches` validation: the DTO rejects malformed input before it
+ * reaches the service in the normal HTTP flow, but the service-level
+ * check protects any other caller of `VideoSessionService.create`
+ * (e.g. a future internal job) that might bypass the DTO.
+ *
+ * The presentation layer maps this failure to HTTP 400 Bad Request via
+ * {@link VideoSessionExceptionFilter}.
+ *
+ * @see VideoSessionExceptionFilter
+ */
+export class InvalidYoutubeVideoIdFailure extends Error {
+  readonly youtubeVideoId: string;
+
+  constructor(youtubeVideoId: string) {
+    super(`"${youtubeVideoId}" is not a valid YouTube video id.`);
+    this.name = 'InvalidYoutubeVideoIdFailure';
+    this.youtubeVideoId = youtubeVideoId;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Thrown when the YouTube Data API v3 reports that the requested video
+ * does not exist (or is private/deleted, which the API surfaces
+ * identically to "not found").
+ *
+ * The presentation layer maps this failure to HTTP 400 Bad Request via
+ * {@link VideoSessionExceptionFilter} — from the caller's perspective
+ * this is the same class of error as a malformed id: "this id does not
+ * resolve to a usable video."
+ *
+ * @see YouTubeService.fetchMetadata
+ * @see VideoSessionExceptionFilter
+ */
+export class YoutubeVideoNotFoundFailure extends Error {
+  readonly youtubeVideoId: string;
+
+  constructor(youtubeVideoId: string) {
+    super(`YouTube video "${youtubeVideoId}" was not found.`);
+    this.name = 'YoutubeVideoNotFoundFailure';
+    this.youtubeVideoId = youtubeVideoId;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Thrown when the YouTube Data API v3 call fails for a reason outside
+ * the caller's control (quota exceeded, network error, malformed
+ * response).
+ *
+ * The presentation layer maps this failure to HTTP 502 Bad Gateway via
+ * {@link VideoSessionExceptionFilter}: the request was well-formed, but
+ * an upstream dependency could not fulfil it.
+ *
+ * @see YouTubeService.fetchMetadata
+ * @see VideoSessionExceptionFilter
+ */
+export class YoutubeApiUnavailableFailure extends Error {
+  constructor(cause: string) {
+    super(`YouTube Data API v3 is unavailable: ${cause}`);
+    this.name = 'YoutubeApiUnavailableFailure';
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
