@@ -2,8 +2,12 @@ import 'dotenv/config';
 import { DataSource, DataSourceOptions } from 'typeorm';
 
 import { UserOrmEntity } from '../auth/data/entities/user.orm-entity';
+import { RoomOrmEntity } from '../room/data/entities/room.orm-entity';
+import { RoomMembershipOrmEntity } from '../room/data/entities/room-membership.orm-entity';
+import { VideoSessionOrmEntity } from '../video-sync/data/entities/video-session.orm-entity';
 import { CreateUsersTable1714000000000 } from './migrations/1714000000000-CreateUsersTable';
 import { CreateRoomsTable1784015715536 } from './migrations/1784015715536-CreateRoomsTable';
+import { CreateVideoSessionsTable1785600000000 } from './migrations/1785600000000-CreateVideoSessionsTable';
 
 /**
  * Reads a required environment variable, throwing a descriptive error if it
@@ -79,14 +83,29 @@ function buildConnectionOptions(): Pick<DataSourceOptions, 'type'> &
  * Supports both DATABASE_URL (CI / managed hosting) and discrete DB_*
  * variables (local development). See {@link buildConnectionOptions}.
  *
+ * `CreateVideoSessionsTable1785600000000` and `VideoSessionOrmEntity`
+ * are registered here, following `rooms`' own precedent —
+ * this file only ever grows by appending new entities/migrations, never
+ * by removing prior bounded contexts' registrations.
+ *
  * @competency Reproducible, environment-agnostic schema deployments
  */
-const AppDataSource = new DataSource({
+export const dataSourceOptions: DataSourceOptions = {
   ...buildConnectionOptions(),
-  entities: [UserOrmEntity],
-  migrations: [CreateUsersTable1714000000000, CreateRoomsTable1784015715536],
+  entities: [
+    UserOrmEntity,
+    RoomOrmEntity,
+    RoomMembershipOrmEntity,
+    VideoSessionOrmEntity,
+  ],
+  migrations: [
+    CreateUsersTable1714000000000,
+    CreateRoomsTable1784015715536,
+    CreateVideoSessionsTable1785600000000,
+  ],
   synchronize: false,
-  logging: false,
-} as DataSourceOptions);
+} as DataSourceOptions;
 
-export default AppDataSource;
+const dataSource = new DataSource(dataSourceOptions);
+
+export default dataSource;

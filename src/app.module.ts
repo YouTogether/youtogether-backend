@@ -4,20 +4,14 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 
 import { AuthModule } from './auth/auth.module';
 import { RoomModule } from './room/room.module';
+import { VideoSyncModule } from './video-sync/video-sync.module';
 
 /**
  * Root application module.
  *
- * Wires the two bounded-context modules ({@link AuthModule},
- * {@link RoomModule}) into the running application. This
- * module had an empty `imports` array: each bounded context's own
- * `TypeOrmModule.forFeature` calls could compile in isolation, but the
- * application had no `TypeOrmModule.forRoot` connection to attach to and
- * neither `AuthModule` nor `RoomModule` was ever actually registered
- * here — meaning `npm run start:dev` could not previously boot a
- * functional server. Generating genuinely useful Swagger documentation
- * requires a running application, which is what surfaced this gap;
- * closing it here rather than leaving it for a later, unrelated task.
+ * Wires the three bounded-context modules ({@link AuthModule},
+ * {@link RoomModule}, {@link VideoSyncModule}) into the running
+ * application.
  *
  * Database migrations are run explicitly via `npm run migration:run`
  * (see package.json), not automatically on boot — `migrationsRun` is
@@ -44,6 +38,7 @@ import { RoomModule } from './room/room.module';
     }),
     AuthModule,
     RoomModule,
+    VideoSyncModule,
   ],
 })
 export class AppModule {}
