@@ -26,6 +26,12 @@ import { RoomController } from './presentation/controllers/room.controller';
  * and `PassportModule` registration, rather than redefining
  * authentication for this module.
  *
+ * Exports {@link OwnershipGuard} and {@link IRoomRepository} so that
+ * `VideoSyncModule` can reuse the same owner-only access control on
+ * `POST /rooms/:id/video-session` (B-V01-T3) rather than duplicating
+ * it — a video session's ownership rule is identical to a room's own
+ * update/delete rule, both keyed off `rooms.owner_id`.
+ *
  * Grows incrementally as backend tasks progress.
  */
 @Module({
@@ -48,5 +54,6 @@ import { RoomController } from './presentation/controllers/room.controller';
       useClass: RoomRepositoryImpl,
     },
   ],
+  exports: [OwnershipGuard, IRoomRepository],
 })
 export class RoomModule {}
