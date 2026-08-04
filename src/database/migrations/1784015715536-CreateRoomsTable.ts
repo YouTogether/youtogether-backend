@@ -20,7 +20,7 @@ import { MigrationInterface, QueryRunner } from 'typeorm';
  *   than a hard unique constraint on the pair. This allows a user to leave
  *   and later rejoin the same room (a new row with `left_at = NULL`),
  *   while still preventing two simultaneous active memberships — matching
- *   the join endpoint's documented behaviour (409 on duplicate *active*
+ *   the join endpoint's documented behavior (409 on duplicate *active*
  *   membership, not on historical reuse).
  * - `timestamptz` for all temporal columns, consistent with the
  *   Authentication migration.
@@ -100,7 +100,7 @@ export class CreateRoomsTable1784015715536 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(`DROP TABLE IF EXISTS "room_memberships";`);
-    await queryRunner.query(`DROP TABLE IF EXISTS "rooms";`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "room_memberships" CASCADE;`);
+    await queryRunner.query(`DROP TABLE IF EXISTS "rooms" CASCADE;`);
   }
 }
