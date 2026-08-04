@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.11.0](https://github.com/YouTogether/youtogether-backend/compare/v0.10.1...v0.11.0) (2026-08-04)
+
+
+### Features
+
+* **video-sync:** [B-V01] implement video session creation endpoint ([#60](https://github.com/YouTogether/youtogether-backend/issues/60)) ([51fb29a](https://github.com/YouTogether/youtogether-backend/commit/51fb29ab8149e005408f9bc7345e48d8e13903f1))
+
 ## [0.10.1](https://github.com/YouTogether/youtogether-backend/compare/v0.10.0...v0.10.1) (2026-07-20)
 
 
