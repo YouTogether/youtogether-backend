@@ -115,7 +115,7 @@ describe('YouTubeService', () => {
 
     const metadata = await service.fetchMetadata(VALID_ID);
 
-    expect(metadata.durationSeconds).toBe(1 * 3600 + 2 * 60 + 10);
+    expect(metadata.durationSeconds).toBe(3600 + 2 * 60 + 10);
   });
 
   it('should parse an ISO 8601 duration with only minutes and seconds', async () => {
