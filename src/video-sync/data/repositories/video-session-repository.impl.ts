@@ -48,4 +48,20 @@ export class VideoSessionRepositoryImpl implements IVideoSessionRepository {
     const saved = await repository.save(entity);
     return VideoSessionMapper.toDomain(saved);
   }
+
+  /**
+   * Returns the most recently created video session for `roomId`, or
+   * `null` if none exists — see
+   * {@link IVideoSessionRepository.findByRoomId}'s own doc comment for
+   * why "most recent" is the right semantics for an append-only table.
+   */
+  async findByRoomId(roomId: string): Promise<VideoSessionEntity | null> {
+    const repository = this.dataSource.getRepository(VideoSessionOrmEntity);
+    const row = await repository.findOne({
+      where: { roomId },
+      order: { createdAt: 'DESC' },
+    });
+
+    return row === null ? null : VideoSessionMapper.toDomain(row);
+  }
 }

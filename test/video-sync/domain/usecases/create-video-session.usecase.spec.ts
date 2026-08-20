@@ -18,6 +18,7 @@ describe('CreateVideoSessionUseCase', () => {
   let useCase: CreateVideoSessionUseCase;
   const fetchMetadataMock = jest.fn();
   const createMock = jest.fn();
+  const findByRoomIdMock = jest.fn();
 
   const VALID_PARAMS = new CreateVideoSessionParams({
     roomId: '7b2e6b0a-2f2a-4b6a-8e2a-1a2b3c4d5e6f',
@@ -39,9 +40,11 @@ describe('CreateVideoSessionUseCase', () => {
   beforeEach(() => {
     fetchMetadataMock.mockReset();
     createMock.mockReset();
+    findByRoomIdMock.mockReset();
 
     const videoSessionRepository: IVideoSessionRepository = {
       create: createMock,
+      findByRoomId: findByRoomIdMock,
     };
     const youTubeService = {
       fetchMetadata: fetchMetadataMock,
