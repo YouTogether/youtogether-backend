@@ -2,7 +2,7 @@
  * Thrown when the supplied YouTube video ID does not match the expected
  * 11-character format.
  *
- * This is a defence-in-depth duplicate of `CreateVideoSessionDto`'s own
+ * This is a defense-in-depth duplicate of `CreateVideoSessionDto`'s own
  * `@Matches` validation: the DTO rejects malformed input before it
  * reaches the service in the normal HTTP flow, but the service-level
  * check protects any other caller of `VideoSessionService.create`
@@ -64,6 +64,29 @@ export class YoutubeApiUnavailableFailure extends Error {
   constructor(cause: string) {
     super(`YouTube Data API v3 is unavailable: ${cause}`);
     this.name = 'YoutubeApiUnavailableFailure';
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/**
+ * Thrown when a room has no video session yet — no video has ever been
+ * added to it via `POST /rooms/:id/video-session`.
+ *
+ * The presentation layer maps this failure to HTTP 404 Not Found via
+ * {@link VideoSessionExceptionFilter}, matching how `RoomExceptionFilter`
+ * maps a missing room to 404: from the caller's perspective this is the
+ * same class of error as the resource simply not existing yet.
+ *
+ * @see GET /rooms/:id/video-session
+ * @see VideoSessionExceptionFilter
+ */
+export class VideoSessionNotFoundFailure extends Error {
+  readonly roomId: string;
+
+  constructor(roomId: string) {
+    super(`Room "${roomId}" has no video session.`);
+    this.name = 'VideoSessionNotFoundFailure';
+    this.roomId = roomId;
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
