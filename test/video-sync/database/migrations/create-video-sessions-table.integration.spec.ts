@@ -76,13 +76,14 @@ describe('CreateVideoSessionsTable Migration (integration)', () => {
     // `users` and/or `rooms`.
     await usersMigration.up(queryRunner);
     await roomsMigration.up(queryRunner);
+    await videoSessionsMigration.down(queryRunner);
     await videoSessionsMigration.up(queryRunner);
     await queryRunner.release();
   });
 
   afterAll(async () => {
     const queryRunner: QueryRunner = dataSource.createQueryRunner();
-    await videoSessionsMigration.down(queryRunner);
+    await videoSessionsMigration.up(queryRunner);
     await queryRunner.release();
     await dataSource.destroy();
   });
@@ -176,15 +177,19 @@ describe('CreateVideoSessionsTable Migration (integration)', () => {
     const fks = await dataSource.query<
       { constraint_name: string; delete_rule: string }[]
     >(
-      `SELECT tc.constraint_name, rc.delete_rule
-       FROM information_schema.table_constraints tc
-       JOIN information_schema.referential_constraints rc
-         ON tc.constraint_name = rc.constraint_name
-       WHERE tc.table_name = 'video_sessions' AND tc.constraint_type = 'FOREIGN KEY'`,
+      `SELECT con.conname AS constraint_name, con.confdeltype AS delete_rule
+       FROM pg_constraint con
+       JOIN pg_class rel ON rel.oid = con.conrelid
+       JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+       WHERE rel.relname = 'video_sessions'
+         AND nsp.nspname = 'public'
+         AND con.contype = 'f'`,
     );
 
     expect(fks.length).toBe(2);
-    expect(fks.every((fk) => fk.delete_rule === 'CASCADE')).toBe(true);
+    // confdeltype: 'c' = CASCADE, 'a' = NO ACTION, 'r' = RESTRICT,
+    // 'n' = SET NULL, 'd' = SET DEFAULT.
+    expect(fks.every((fk) => fk.delete_rule === 'c')).toBe(true);
   });
 
   it('should be reversible via down()', async () => {
