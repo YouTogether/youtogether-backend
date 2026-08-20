@@ -1,6 +1,7 @@
 import {
   Controller,
   Body,
+  Get,
   HttpCode,
   HttpStatus,
   Param,
@@ -15,6 +16,7 @@ import {
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiNotFoundResponse,
+  ApiOkResponse,
   ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
@@ -22,6 +24,7 @@ import {
 
 import { CreateVideoSessionUseCase } from '../../domain/usecases/create-video-session.usecase';
 import { CreateVideoSessionParams } from '../../domain/usecases/create-video-session.params';
+import { GetVideoSessionUseCase } from '../../domain/usecases/get-video-session.usecase';
 import { CreateVideoSessionDto } from '../dtos/create-video-session.dto';
 import { VideoSessionResponseDto } from '../dtos/video-session-response.dto';
 import { CurrentUser } from '../../../auth/presentation/decorators/current-user.decorator';
@@ -40,18 +43,17 @@ import { VideoSessionExceptionFilter } from '../filters/video-session-exception.
  * room, mirroring how `join`/`leave` are nested under `/rooms/:id` on
  * `RoomController` rather than exposed as a `memberships` resource.
  *
- * Reuses {@link OwnershipGuard} from the Room bounded context as-is
- * (imported directly — no barrel file, per project convention): only
- * the room's owner may create a video session (B-V01's Acceptance
- * Criteria), the exact same rule `PATCH`/`DELETE /rooms/:id` already
- * enforce, so a second implementation of the same guard would be pure
- * duplication.
- *
  * Routes:
  * - POST /rooms/:id/video-session -> {@link CreateVideoSessionUseCase}
- *   (protected by {@link JwtAuthGuard}, {@link OwnershipGuard})
+ *   (protected by {@link JwtAuthGuard}, {@link OwnershipGuard} — owner
+ *   only, since adding a video is a room-management action)
+ * - GET  /rooms/:id/video-session -> {@link GetVideoSessionUseCase}
+ *   (protected by {@link JwtAuthGuard} only — every authenticated room
+ *   member/viewer needs to read this to sync on entry, not just the
+ *   owner; see that method's own doc comment)
  *
  * @see CreateVideoSessionUseCase
+ * @see GetVideoSessionUseCase
  * @see VideoSessionExceptionFilter
  * @see RoomExceptionFilter
  */
@@ -61,6 +63,7 @@ import { VideoSessionExceptionFilter } from '../filters/video-session-exception.
 export class VideoSessionController {
   constructor(
     private readonly createVideoSessionUseCase: CreateVideoSessionUseCase,
+    private readonly getVideoSessionUseCase: GetVideoSessionUseCase,
   ) {}
 
   /**
@@ -128,6 +131,49 @@ export class VideoSessionController {
       }),
     );
 
+    return VideoSessionResponseDto.fromEntity(session);
+  }
+
+  /**
+   * GET /rooms/:id/video-session
+   *
+   * Returns the room's current video session (metadata cached at
+   * creation — title, thumbnail, `durationSeconds`, `youtubeVideoId`).
+   *
+   * Deliberately guarded by {@link JwtAuthGuard} only, not
+   * {@link OwnershipGuard}: unlike creation (an owner-only
+   * room-management action), reading the video session is something
+   * every member/viewer needs on room entry, to know what to load into
+   * `YouTubePlayerWidget` and how long the video runs (for the seek
+   * bound `PlaybackTimestamp` enforces) — B-V02 exists specifically to
+   * close that gap for the frontend's `sessionJoined` handler
+   * (`VideoSyncBloc`).
+   *
+   * HTTP status codes:
+   * - 200 OK           — video session found.
+   * - 401 Unauthorized — missing, invalid, or expired access token.
+   * - 404 Not Found    — the room does not exist, or exists but has no
+   *   video session yet ({@link VideoSessionNotFoundFailure}).
+   */
+  @Get()
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('bearer')
+  @ApiOperation({
+    summary: "Get this room's current video session",
+  })
+  @ApiOkResponse({
+    description: 'Video session found.',
+    type: VideoSessionResponseDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid, or expired access token.',
+  })
+  @ApiNotFoundResponse({
+    description: 'The room does not exist, or has no video session yet.',
+  })
+  async findOne(@Param('id') roomId: string): Promise<VideoSessionResponseDto> {
+    const session = await this.getVideoSessionUseCase.execute(roomId);
     return VideoSessionResponseDto.fromEntity(session);
   }
 }
