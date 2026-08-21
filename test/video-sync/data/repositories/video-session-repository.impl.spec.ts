@@ -83,3 +83,65 @@ describe('VideoSessionRepositoryImpl', () => {
     expect(result.thumbnailUrl).toBeNull();
   });
 });
+
+/**
+ * Unit tests for VideoSessionRepositoryImpl.findByRoomId.
+ *
+ * @competency Unit test harness.
+ */
+describe('VideoSessionRepositoryImpl.findByRoomId', () => {
+  let repository: VideoSessionRepositoryImpl;
+  let dataSource: DataSource;
+  let findOneMock: jest.Mock;
+
+  const ROOM_ID = 'room-uuid';
+
+  const ORM_ROW: VideoSessionOrmEntity = {
+    id: 'video-session-uuid',
+    roomId: ROOM_ID,
+    youtubeVideoId: 'dQw4w9WgXcQ',
+    title: 'Never Gonna Give You Up',
+    thumbnailUrl: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+    durationSeconds: 213,
+    addedBy: 'user-uuid',
+    createdAt: new Date('2026-01-05T00:00:00Z'),
+  };
+
+  beforeEach(() => {
+    findOneMock = jest.fn();
+
+    dataSource = {
+      getRepository: jest.fn().mockReturnValue({ findOne: findOneMock }),
+    } as unknown as DataSource;
+
+    repository = new VideoSessionRepositoryImpl(dataSource);
+  });
+
+  it('should query by roomId, ordered by createdAt descending, taking the most recent row', async () => {
+    findOneMock.mockResolvedValue(ORM_ROW);
+
+    await repository.findByRoomId(ROOM_ID);
+
+    expect(findOneMock).toHaveBeenCalledWith({
+      where: { roomId: ROOM_ID },
+      order: { createdAt: 'DESC' },
+    });
+  });
+
+  it('should return a mapped VideoSessionEntity when a row exists', async () => {
+    findOneMock.mockResolvedValue(ORM_ROW);
+
+    const result = await repository.findByRoomId(ROOM_ID);
+
+    expect(result?.id).toBe('video-session-uuid');
+    expect(result?.durationSeconds).toBe(213);
+  });
+
+  it('should return null when the room has no video session', async () => {
+    findOneMock.mockResolvedValue(null);
+
+    const result = await repository.findByRoomId(ROOM_ID);
+
+    expect(result).toBeNull();
+  });
+});

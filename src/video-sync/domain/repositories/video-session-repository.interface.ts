@@ -21,8 +21,7 @@ export interface VideoMetadata {
  *
  * Deliberately narrow: only session creation is exposed for the MVP —
  * there is no `update`, `delete`, or `findAll`, since a video session is
- * an append-only record for the current scope (see the data model's
- * business rules, Section 2.1.4).
+ * an append-only record for the current scope.
  *
  * @see VideoSessionRepositoryImpl
  */
@@ -35,4 +34,19 @@ export abstract class IVideoSessionRepository {
     },
     metadata: VideoMetadata,
   ): Promise<VideoSessionEntity>;
+
+  /**
+   * Returns the video session currently associated with `roomId`, or
+   * `null` if none has been created yet.
+   *
+   * `video_sessions` is append-only for this scope (see this class's
+   * own doc comment), so a room may in principle accumulate more than
+   * one row over time; this method returns the most recently created
+   * one — "the room's current video," matching the single
+   * `playback_state` node Firebase holds per room, which always
+   * reflects the latest session, never a history of past ones.
+   *
+   * @see GET /rooms/:id/video-session, the sole consumer
+   */
+  abstract findByRoomId(roomId: string): Promise<VideoSessionEntity | null>;
 }
