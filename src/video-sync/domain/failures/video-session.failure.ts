@@ -90,3 +90,40 @@ export class VideoSessionNotFoundFailure extends Error {
     Object.setPrototypeOf(this, new.target.prototype);
   }
 }
+
+/**
+ * Thrown when the initial `playback_state` write to the Realtime
+ * Database cannot be completed (credentials rejected, network error,
+ * security rules refusing the write).
+ *
+ * Mapped to HTTP 502 Bad Gateway via
+ * {@link VideoSessionExceptionFilter}, for the same reason as
+ * {@link YoutubeApiUnavailableFailure}: the request was well-formed and
+ * authorized, but an upstream dependency could not fulfil it.
+ *
+ * ## Consistency note
+ * This failure is raised *after* the `video_sessions` row has been
+ * committed to PostgreSQL. The two writes are not transactional and
+ * cannot be: one targets a relational database, the other a remote
+ * document store.
+ *
+ * Persist-then-mirror is the deliberate ordering. The reverse would
+ * leave a `playback_state` node pointing at a session that does not
+ * exist, which every client would happily play. This ordering leaves a
+ * persisted session with no real-time node, which the client detects
+ * (`GetCurrentPlaybackStateUseCase` fails while
+ * `GetVideoSessionUseCase` succeeds) and recovers from by retrying the
+ * creation — the node write is idempotent, and `findByRoomId` returns
+ * the most recent row, so a replayed creation converges rather than
+ * corrupting state.
+ *
+ * @see FirebaseRealtimeStateService.initialisePlaybackState
+ * @see VideoSessionExceptionFilter
+ */
+export class RealtimeStateUnavailableFailure extends Error {
+  constructor(cause: string) {
+    super(`The realtime playback state could not be initialised: ${cause}`);
+    this.name = 'RealtimeStateUnavailableFailure';
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}

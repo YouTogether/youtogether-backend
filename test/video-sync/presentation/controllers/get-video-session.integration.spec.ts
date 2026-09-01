@@ -29,6 +29,7 @@ import { GetVideoSessionUseCase } from '../../../../src/video-sync/domain/usecas
 import { YouTubeService } from '../../../../src/video-sync/data/services/youtube.service';
 import { VideoSessionController } from '../../../../src/video-sync/presentation/controllers/video-session.controller';
 import { VideoSessionExceptionFilter } from '../../../../src/video-sync/presentation/filters/video-session-exception.filter';
+import { IRealtimeStateWriter } from '../../../../src/video-sync/domain/repositories/realtime-state-writer.interface';
 
 /**
  * Integration tests for GET /rooms/:id/video-session.
@@ -77,7 +78,7 @@ describe('GET /rooms/:id/video-session (integration)', () => {
 
     const module: TestingModule = await Test.createTestingModule({
       imports: [
-        ConfigModule.forRoot({
+        await ConfigModule.forRoot({
           isGlobal: true,
           envFilePath: '.env.test',
           ignoreEnvFile: databaseUrl !== undefined,
@@ -154,6 +155,16 @@ describe('GET /rooms/:id/video-session (integration)', () => {
         {
           provide: YouTubeService,
           useValue: { fetchMetadata: fetchMetadataMock },
+        },
+        {
+          provide: YouTubeService,
+          useValue: { fetchMetadata: fetchMetadataMock },
+        },
+        {
+          provide: IRealtimeStateWriter,
+          useValue: {
+            initialisePlaybackState: jest.fn().mockResolvedValue(undefined),
+          },
         },
       ],
     }).compile();
