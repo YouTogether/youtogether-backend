@@ -29,6 +29,7 @@ import { GetVideoSessionUseCase } from '../../../../src/video-sync/domain/usecas
 import { YouTubeService } from '../../../../src/video-sync/data/services/youtube.service';
 import { VideoSessionController } from '../../../../src/video-sync/presentation/controllers/video-session.controller';
 import { VideoSessionExceptionFilter } from '../../../../src/video-sync/presentation/filters/video-session-exception.filter';
+import { IRealtimeStateWriter } from '../../../../src/video-sync/domain/repositories/realtime-state-writer.interface';
 
 /**
  * Integration tests for POST /rooms/:id/video-session.
@@ -77,6 +78,7 @@ describe('POST /rooms/:id/video-session (integration)', () => {
   let ownerToken: string;
   let nonOwnerToken: string;
   const fetchMetadataMock = jest.fn();
+  const initialisePlaybackStateMock = jest.fn();
 
   beforeAll(async () => {
     const databaseUrl = process.env.DATABASE_URL;
@@ -161,6 +163,10 @@ describe('POST /rooms/:id/video-session (integration)', () => {
           provide: YouTubeService,
           useValue: { fetchMetadata: fetchMetadataMock },
         },
+        {
+          provide: IRealtimeStateWriter,
+          useValue: { initialisePlaybackState: initialisePlaybackStateMock },
+        },
       ],
     }).compile();
 
@@ -182,6 +188,8 @@ describe('POST /rooms/:id/video-session (integration)', () => {
 
   beforeEach(async () => {
     fetchMetadataMock.mockReset();
+    initialisePlaybackStateMock.mockReset();
+    initialisePlaybackStateMock.mockResolvedValue(undefined);
     fetchMetadataMock.mockResolvedValue({
       title: 'Never Gonna Give You Up',
       thumbnailUrl: 'https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
@@ -303,6 +311,34 @@ describe('POST /rooms/:id/video-session (integration)', () => {
       new (
         await import('../../../../src/video-sync/domain/failures/video-session.failure')
       ).YoutubeApiUnavailableFailure('quota exceeded'),
+    );
+
+    const response = await request(httpServer)
+      .post(`/rooms/${roomId}/video-session`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ youtubeVideoId: 'dQw4w9WgXcQ' });
+
+    expect(response.status).toBe(502);
+  });
+
+  it('should initialise the realtime playback state with the room owner as leader (VS-CRE-05)', async () => {
+    await request(httpServer)
+      .post(`/rooms/${roomId}/video-session`)
+      .set('Authorization', `Bearer ${ownerToken}`)
+      .send({ youtubeVideoId: 'dQw4w9WgXcQ' });
+
+    expect(initialisePlaybackStateMock).toHaveBeenCalledWith({
+      roomId,
+      youtubeVideoId: 'dQw4w9WgXcQ',
+      leaderId: ownerId,
+    });
+  });
+
+  it('should return 502 when the realtime state cannot be written (VS-CRE-06)', async () => {
+    initialisePlaybackStateMock.mockRejectedValue(
+      new (
+        await import('../../../../src/video-sync/domain/failures/video-session.failure')
+      ).RealtimeStateUnavailableFailure('permission_denied'),
     );
 
     const response = await request(httpServer)
