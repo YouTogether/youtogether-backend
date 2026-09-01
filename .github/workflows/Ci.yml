@@ -175,6 +175,10 @@ jobs:
           NODE_ENV: test
           JWT_SECRET: ${{ secrets.CI_JWT_SECRET }}
           JWT_REFRESH_SECRET: ${{ secrets.CI_JWT_REFRESH_SECRET }}
+          FIREBASE_PROJECT_ID: ${{ secrets.CI_FIREBASE_PROJECT_ID }}
+          FIREBASE_CLIENT_EMAIL: ${{ secrets.CI_FIREBASE_CLIENT_EMAIL }}
+          FIREBASE_PRIVATE_KEY: ${{ secrets.CI_FIREBASE_PRIVATE_KEY }}
+          FIREBASE_DATABASE_URL: ${{ secrets.CI_FIREBASE_DATABASE_URL }}
 
   # ---------------------------------------------------------------------------
   # Job: build (runs on main branch only)
