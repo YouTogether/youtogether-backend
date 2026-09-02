@@ -17,6 +17,7 @@ import { DeleteRoomUseCase } from '../../src/room/domain/usecases/delete-room.us
 import { JoinRoomUseCase } from '../../src/room/domain/usecases/join-room.usecase';
 import { LeaveRoomUseCase } from '../../src/room/domain/usecases/leave-room.usecase';
 import { IRoomRepository } from '../../src/room/domain/repositories/room-repository.interface';
+import { IssueFirebaseTokenUseCase } from '../../src/auth/domain/usecases/issue-firebase-token.usecase';
 
 /**
  * Verifies that the OpenAPI/Swagger document generated for the API
@@ -62,6 +63,7 @@ describe('OpenAPI document generation', () => {
         { provide: JoinRoomUseCase, useValue: { execute: jest.fn() } },
         { provide: LeaveRoomUseCase, useValue: { execute: jest.fn() } },
         { provide: IRoomRepository, useValue: roomRepositoryStub },
+        { provide: IssueFirebaseTokenUseCase, useValue: jest.fn() },
       ],
     }).compile();
 

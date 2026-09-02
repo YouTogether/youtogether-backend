@@ -23,6 +23,7 @@ import { DomainExceptionFilter } from '../../../../src/auth/presentation/filters
 import { JwtStrategy } from '../../../../src/auth/presentation/strategies/jwt.strategy';
 import { CreateUsersTable1714000000000 } from '../../../../src/database/migrations/1714000000000-CreateUsersTable';
 import { GetCurrentUserUseCase } from '../../../../src/auth/domain/usecases/get-current-user.usecase';
+import { IssueFirebaseTokenUseCase } from '../../../../src/auth/domain/usecases/issue-firebase-token.usecase';
 
 /**
  * Integration tests for POST /auth/refresh.
@@ -111,6 +112,10 @@ describe('POST /auth/refresh (integration)', () => {
             }) as typeof real.getOrThrow;
             return real;
           },
+        },
+        {
+          provide: IssueFirebaseTokenUseCase,
+          useValue: { execute: jest.fn() },
         },
       ],
     }).compile();

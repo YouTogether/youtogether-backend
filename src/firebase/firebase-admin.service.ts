@@ -12,6 +12,7 @@ import {
   getApps,
   initializeApp,
 } from 'firebase-admin/app';
+import { Auth, getAuth } from 'firebase-admin/auth';
 import { Database, getDatabase } from 'firebase-admin/database';
 
 /**
@@ -22,8 +23,9 @@ import { Database, getDatabase } from 'firebase-admin/database';
  * because two contexts need it for unrelated reasons:
  * - Video Synchronisation writes the authoritative `playback_state`
  *   node at session creation ({@link FirebaseRealtimeStateService}).
- * - Authentication will mint Firebase custom tokens so that Realtime
- *   Database security rules can authorise writes against `auth.uid`.
+ * - Authentication mints Firebase custom tokens so that Realtime
+ *   Database security rules can authorize writes against `auth.uid`
+ *   ({@link FirebaseAuthProviderService}).
  *
  * Placing it under either context would force the other to depend on a
  * bounded context it has no business knowing about.
@@ -42,8 +44,9 @@ import { Database, getDatabase } from 'firebase-admin/database';
  * All four are read with `getOrThrow`, so a misconfigured deployment
  * fails at boot rather than at the first write. The private key is a
  * first-order secret: it bypasses every Realtime Database security
- * rule. It is never logged, and the service-account JSON it came from
- * must never be committed.
+ * rule, and it signs the custom tokens that establish user identity. It
+ * is never logged, and the service-account JSON it came from must never
+ * be committed.
  *
  * ## Named application
  * The SDK is initialized under an explicit application name rather than
@@ -66,7 +69,7 @@ export class FirebaseAdminService implements OnModuleInit, OnModuleDestroy {
   constructor(private readonly configService: ConfigService) {}
 
   /**
-   * Initialises the Firebase application, or adopts an already
+   * Initializes the Firebase application, or adopts an already
    * registered one of the same name.
    *
    * @throws {Error} if any required environment variable is absent
@@ -138,13 +141,30 @@ export class FirebaseAdminService implements OnModuleInit, OnModuleDestroy {
    * @throws {Error} if accessed before {@link onModuleInit} has run.
    */
   get database(): Database {
+    return getDatabase(this.requireApp());
+  }
+
+  /**
+   * The Firebase Authentication handle for the initialized application.
+   *
+   * Used for exactly one operation, `createCustomToken` — see
+   * {@link IFirebaseAuthProvider} for why the backend asserts identities
+   * to Firebase without ever reading them back from it.
+   *
+   * @throws {Error} if accessed before {@link onModuleInit} has run.
+   */
+  get auth(): Auth {
+    return getAuth(this.requireApp());
+  }
+
+  private requireApp(): App {
     if (this.app === null) {
       throw new Error(
         'FirebaseAdminService was used before onModuleInit() completed.',
       );
     }
 
-    return getDatabase(this.app);
+    return this.app;
   }
 
   /**

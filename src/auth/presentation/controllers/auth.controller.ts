@@ -9,6 +9,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import {
+  ApiBadGatewayResponse,
   ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
@@ -37,6 +38,9 @@ import { CurrentUser } from '../decorators/current-user.decorator';
 import { DomainExceptionFilter } from '../filters/domain-exception.filter';
 import { JwtAuthGuard } from '../guards/jwt-auth.guard';
 import { AuthenticatedUser } from '../interfaces/authenticated-user.interface';
+import { IssueFirebaseTokenUseCase } from '../../domain/usecases/issue-firebase-token.usecase';
+import { FirebaseTokenResponseDto } from '../dtos/firebase-token-response.dto';
+import { IssueFirebaseTokenParams } from '../../domain/usecases/issue-firebase-token.params';
 
 /**
  * Controller for the Authentication bounded context.
@@ -72,6 +76,7 @@ export class AuthController {
     private readonly refreshUseCase: RefreshUseCase,
     private readonly logoutUseCase: LogoutUseCase,
     private readonly getCurrentUserUseCase: GetCurrentUserUseCase,
+    private readonly issueFirebaseTokenUseCase: IssueFirebaseTokenUseCase,
   ) {}
 
   /**
@@ -230,6 +235,57 @@ export class AuthController {
     );
 
     return UserProfileDto.fromUserEntity(currentUser);
+  }
+
+  /**
+   * POST /auth/firebase-token
+   *
+   * Issues a single-use Firebase custom token whose `uid` is the
+   * authenticated user's UUID, so the client can establish a Firebase
+   * session and have its Realtime Database writes authorized against
+   * `auth.uid`.
+   *
+   * POST rather than GET despite taking no body. The response carries a
+   * credential, and GET responses are the ones that end up in browser
+   * caches, proxy logs and `Referer` headers.
+   *
+   * Requires a valid, non-expired access token via {@link JwtAuthGuard}.
+   * The user id is taken exclusively from the validated token (via
+   * {@link CurrentUser}) and re-checked against the database before any
+   * token is minted — see {@link IssueFirebaseTokenUseCase} for why that
+   * second check is not redundant here even though it would be on
+   * POST /auth/logout.
+   *
+   * HTTP status codes:
+   * - 201 Created      — token issued.
+   * - 401 Unauthorized — missing, invalid, or expired access token, or
+   *   the token's user no longer resolves to an active account.
+   * - 502 Bad Gateway  — Firebase could not sign the token. The client's
+   *   own session is unaffected; retrying shortly is the correct
+   *   response.
+   */
+  @Post('firebase-token')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('bearer')
+  @ApiOperation({ summary: 'Issue a Firebase custom token for this session' })
+  @ApiCreatedResponse({
+    description: 'Token issued.',
+    type: FirebaseTokenResponseDto,
+  })
+  @ApiUnauthorizedResponse({
+    description: 'Missing, invalid, or expired access token.',
+  })
+  @ApiBadGatewayResponse({
+    description: 'Firebase could not sign the token.',
+  })
+  async firebaseToken(
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<FirebaseTokenResponseDto> {
+    const token = await this.issueFirebaseTokenUseCase.execute(
+      new IssueFirebaseTokenParams({ userId: user.userId }),
+    );
+
+    return FirebaseTokenResponseDto.fromToken(token);
   }
 
   /**

@@ -23,6 +23,7 @@ import { AuthController } from '../../../../src/auth/presentation/controllers/au
 import { DomainExceptionFilter } from '../../../../src/auth/presentation/filters/domain-exception.filter';
 import { JwtStrategy } from '../../../../src/auth/presentation/strategies/jwt.strategy';
 import { CreateUsersTable1714000000000 } from '../../../../src/database/migrations/1714000000000-CreateUsersTable';
+import { IssueFirebaseTokenUseCase } from '../../../../src/auth/domain/usecases/issue-firebase-token.usecase';
 
 /**
  * Shape of the successful authentication response body (HTTP 200).
@@ -122,6 +123,10 @@ describe('POST /auth/login (integration)', () => {
         TokenService,
         JwtStrategy,
         { provide: IAuthRepository, useClass: AuthRepositoryImpl },
+        {
+          provide: IssueFirebaseTokenUseCase,
+          useValue: { execute: jest.fn() },
+        },
       ],
     }).compile();
 
