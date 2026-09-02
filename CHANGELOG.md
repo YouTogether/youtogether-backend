@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.12.0](https://github.com/YouTogether/youtogether-backend/compare/v0.11.0...v0.12.0) (2026-09-02)
+
+
+### Features
+
+* **auth:** [B-A06] Issue Firebase custom tokens for authenticated sessions ([#65](https://github.com/YouTogether/youtogether-backend/issues/65)) ([3a8cdbe](https://github.com/YouTogether/youtogether-backend/commit/3a8cdbe587f82d7cb5a3d822cdbec26d67b1c9fe))
+* **video sync:** [B-V02] get video session endpoint ([#62](https://github.com/YouTogether/youtogether-backend/issues/62)) ([0d6fa88](https://github.com/YouTogether/youtogether-backend/commit/0d6fa884b7c940b061634fbc66bdc9569077f153))
+* **video-sync:** [B-V03] Initialise playback_state from the backend ([#64](https://github.com/YouTogether/youtogether-backend/issues/64)) ([34d61d1](https://github.com/YouTogether/youtogether-backend/commit/34d61d1e00de25ffdf15ebdb66db05738722c492))
+
 ## [0.11.0](https://github.com/YouTogether/youtogether-backend/compare/v0.10.1...v0.11.0) (2026-08-04)
 
 
