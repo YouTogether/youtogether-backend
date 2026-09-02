@@ -59,7 +59,7 @@ import { CreateUsersTable1714000000000 } from '../../../../src/database/migratio
  * @competency Test scenarios A-FBT-01, A-FBT-02, A-FBT-03, A-FBT-04.
  */
 const TEST_JWT_SECRET =
-  process.env.JWT_SECRET ?? 'test-access-secret-value-for-integration-specs';
+  process.env.JWT_SECRET ?? 'test-access-secret-do-not-use-in-production';
 
 describe('POST /auth/firebase-token (integration)', () => {
   let app: INestApplication;
@@ -110,24 +110,53 @@ describe('POST /auth/firebase-token (integration)', () => {
         TypeOrmModule.forRootAsync({
           imports: [ConfigModule],
           inject: [ConfigService],
-          useFactory: (configService: ConfigService) => ({
-            type: 'postgres' as const,
-            host: configService.getOrThrow<string>('DB_HOST'),
-            port: Number(configService.getOrThrow<string>('DB_PORT')),
-            username: configService.getOrThrow<string>('DB_USERNAME'),
-            password: configService.getOrThrow<string>('DB_PASSWORD'),
-            database: configService.getOrThrow<string>('DB_DATABASE'),
-            entities: [UserOrmEntity],
-            migrations: [CreateUsersTable1714000000000],
-            migrationsRun: true,
-            synchronize: false,
-          }),
+          useFactory: (configService: ConfigService) => {
+            const databaseUrl = process.env.DATABASE_URL;
+            const connection =
+              databaseUrl !== undefined && databaseUrl !== ''
+                ? { url: databaseUrl }
+                : {
+                    host: configService.get<string>('DB_HOST', 'localhost'),
+                    port: configService.get<number>('DB_PORT', 5432),
+                    username: configService.get<string>(
+                      'DB_USERNAME',
+                      'postgres',
+                    ),
+                    password: configService.get<string>(
+                      'DB_PASSWORD',
+                      'postgres',
+                    ),
+                    database: configService.get<string>(
+                      'DB_TEST_DATABASE',
+                      'youtogether_test',
+                    ),
+                  };
+
+            return {
+              type: 'postgres' as const,
+              ...connection,
+              entities: [UserOrmEntity],
+              migrations: [CreateUsersTable1714000000000],
+              // No dropSchema: this file may run concurrently with the
+              // other *.integration.spec.ts files against the same
+              // physical test database. The migration is idempotent
+              // (CREATE TABLE IF NOT EXISTS), so migrationsRun alone is
+              // sufficient under arbitrary parallelism.
+              migrationsRun: true,
+              synchronize: false,
+              logging: ['error' as const],
+            };
+          },
         }),
         TypeOrmModule.forFeature([UserOrmEntity]),
         PassportModule.register({ defaultStrategy: 'jwt' }),
-        JwtModule.register({
-          secret: TEST_JWT_SECRET,
-          signOptions: { expiresIn: '15m' },
+        JwtModule.registerAsync({
+          useFactory: () => ({
+            secret:
+              process.env.JWT_SECRET ??
+              'test-access-secret-do-not-use-in-production',
+            signOptions: { expiresIn: '15m' },
+          }),
         }),
       ],
       controllers: [AuthController],
@@ -230,9 +259,6 @@ describe('POST /auth/firebase-token (integration)', () => {
     it('should return 401 when the account was soft-deleted after the token was issued (A-FBT-02)', async () => {
       const { accessToken } = await registerUser();
 
-      // NOTE: align this statement with the soft-delete column and
-      // statement used by me.integration.spec.ts for the equivalent
-      // scenario.
       await dataSource.query(
         'UPDATE users SET deleted_at = NOW() WHERE email = $1',
         [CREDENTIALS.email],

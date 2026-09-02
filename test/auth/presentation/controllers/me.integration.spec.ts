@@ -23,6 +23,7 @@ import { DomainExceptionFilter } from '../../../../src/auth/presentation/filters
 import { JwtAuthGuard } from '../../../../src/auth/presentation/guards/jwt-auth.guard';
 import { JwtStrategy } from '../../../../src/auth/presentation/strategies/jwt.strategy';
 import { CreateUsersTable1714000000000 } from '../../../../src/database/migrations/1714000000000-CreateUsersTable';
+import { IssueFirebaseTokenUseCase } from '../../../../src/auth/domain/usecases/issue-firebase-token.usecase';
 
 /**
  * Integration tests for GET /auth/me.
@@ -121,6 +122,10 @@ describe('GET /auth/me (integration)', () => {
         JwtStrategy,
         JwtAuthGuard,
         { provide: IAuthRepository, useClass: AuthRepositoryImpl },
+        {
+          provide: IssueFirebaseTokenUseCase,
+          useValue: { execute: jest.fn() },
+        },
       ],
     }).compile();
 

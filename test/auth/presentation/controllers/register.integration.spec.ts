@@ -21,6 +21,7 @@ import { AuthController } from '../../../../src/auth/presentation/controllers/au
 import { DomainExceptionFilter } from '../../../../src/auth/presentation/filters/domain-exception.filter';
 import { CreateUsersTable1714000000000 } from '../../../../src/database/migrations/1714000000000-CreateUsersTable';
 import { GetCurrentUserUseCase } from '../../../../src/auth/domain/usecases/get-current-user.usecase';
+import { IssueFirebaseTokenUseCase } from '../../../../src/auth/domain/usecases/issue-firebase-token.usecase';
 
 /**
  * Shape of the successful registration response body (HTTP 201).
@@ -157,6 +158,10 @@ describe('POST /auth/register (integration)', () => {
         GetCurrentUserUseCase,
         TokenService,
         { provide: IAuthRepository, useClass: AuthRepositoryImpl },
+        {
+          provide: IssueFirebaseTokenUseCase,
+          useValue: { execute: jest.fn() },
+        },
       ],
     }).compile();
 

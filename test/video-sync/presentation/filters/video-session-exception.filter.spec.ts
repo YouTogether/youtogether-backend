@@ -9,6 +9,7 @@ import {
   YoutubeVideoNotFoundFailure,
 } from '../../../../src/video-sync/domain/failures/video-session.failure';
 import { VideoSessionExceptionFilter } from '../../../../src/video-sync/presentation/filters/video-session-exception.filter';
+import { FirebaseTokenUnavailableFailure } from '../../../../src/auth/domain/failures/firebase-token.failure';
 
 /**
  * Unit tests for VideoSessionExceptionFilter.
@@ -16,16 +17,16 @@ import { VideoSessionExceptionFilter } from '../../../../src/video-sync/presenta
  * Mirrors `room-exception.filter.spec.ts`: the filter's own `catch()`
  * is invoked against a mocked `ArgumentsHost`/`Response`, giving direct
  * coverage of the mapping logic rather than of NestJS's
- * `HttpException` behaviour.
+ * `HttpException` behavior.
  *
- * This suite was missing until B-V03 — the filter's mappings were only
+ * This suite was missing until — the filter's mappings were only
  * ever asserted indirectly, through the status codes returned by the
  * `create-video-session` and `get-video-session` integration suites.
  * That indirection is workable for a mapping already exercised by an
  * HTTP route, but it leaves no direct evidence of the mapping table
  * itself, and it cannot distinguish "the filter maps this failure to
  * 502" from "some other layer produced a 502". Adding the file here
- * rather than in a separate ticket is deliberate: B-V03 extends this
+ * rather than in a separate ticket is deliberate: extends this
  * filter's `@Catch` list, and extending an untested mapping table is
  * how mapping tables quietly drift.
  *
@@ -107,5 +108,43 @@ describe('VideoSessionExceptionFilter', () => {
 
     const [jsonBody] = jsonMock.mock.calls[0] as [Record<string, unknown>];
     expect(jsonBody.youtubeVideoId).toBeUndefined();
+  });
+
+  it('should map FirebaseTokenUnavailableFailure to a 502 status (A-FBT-04)', () => {
+    filter.catch(new FirebaseTokenUnavailableFailure('IAM denied'), host);
+
+    expect(statusMock).toHaveBeenCalledWith(502);
+  });
+
+  it("should reach the default branch for none of @Catch()'s five failures '(structural regression guard)'", () => {
+    // This is the test the ticket that introduced the mapping table
+    // exists to add. It does not assert a status code; it
+    // asserts that every failure this filter is declared to catch takes
+    // an explicit branch rather than falling through to `default`. A
+    // future failure added to `@Catch()` without a matching `case`
+    // would still compile — the `default` branch exists precisely so
+    // that TypeScript accepts it — but would land silently on 502
+    // regardless of whether 502 was the intended status, the same way
+    // `FirebaseTokenUnavailableFailure` landed silently on 401 in the
+    // sibling `DomainExceptionFilter` before that bug was found.
+    const instances = [
+      new InvalidYoutubeVideoIdFailure('not-11-chars'),
+      new YoutubeVideoNotFoundFailure('zzzzzzzzzzz'),
+      new VideoSessionNotFoundFailure(ROOM_ID),
+      new YoutubeApiUnavailableFailure('quota exceeded'),
+      new RealtimeStateUnavailableFailure('permission_denied'),
+    ];
+
+    const defaultBadGatewayMessage = 'Unhandled video session failure.';
+
+    for (const instance of instances) {
+      jsonMock.mockClear();
+      statusMock.mockClear();
+
+      filter.catch(instance, host);
+
+      const [jsonBody] = jsonMock.mock.calls[0] as [{ message: string }];
+      expect(jsonBody.message).not.toBe(defaultBadGatewayMessage);
+    }
   });
 });

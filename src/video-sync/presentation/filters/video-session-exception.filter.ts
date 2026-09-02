@@ -17,8 +17,8 @@ import {
 } from '../../domain/failures/video-session.failure';
 
 /**
- * Maps Video Synchronisation domain failures to HTTP responses,
- * mirroring `RoomExceptionFilter`.
+ * Maps Video Synchronisation domain failures to HTTP responses, mirroring
+ * `DomainExceptionFilter`.
  *
  * `OwnershipGuard` and a missing *room* are already covered by
  * `RoomExceptionFilter` (reused as-is on this controller, see
@@ -27,58 +27,96 @@ import {
  * yet.
  *
  * Mappings:
- * - {@link InvalidYoutubeVideoIdFailure} -> 400 Bad Request
- * - {@link YoutubeVideoNotFoundFailure} -> 400 Bad Request
- * - {@link VideoSessionNotFoundFailure} -> 404 Not Found
- * - {@link YoutubeApiUnavailableFailure} -> 502 Bad Gateway
+ * - {@link InvalidYoutubeVideoIdFailure}    -> 400 Bad Request
+ * - {@link YoutubeVideoNotFoundFailure}     -> 400 Bad Request
+ * - {@link VideoSessionNotFoundFailure}     -> 404 Not Found
+ * - {@link YoutubeApiUnavailableFailure}    -> 502 Bad Gateway
  * - {@link RealtimeStateUnavailableFailure} -> 502 Bad Gateway
  *
- * The two 502 cases share the trailing branch deliberately: both mean
- * "the request was well-formed and authorized, but an upstream
- * dependency could not fulfil it", and the client's recovery is the
- * same in either case — retry the creation.
+ * ## Why a mapping table rather than a trailing catch-all
+ * The previous shape read as "400 for the two id failures, 404 for a
+ * missing session, everything else falls through to 502" — correct
+ * only for as long as every failure ever added to `@Catch()` happened
+ * to mean 502. `DomainExceptionFilter` carried the equivalent shape
+ * with 401 as its silent default, and adding
+ * `FirebaseTokenUnavailableFailure` there without a dedicated branch
+ * mapped a 502-shaped failure to 401 unnoticed — caught only because a
+ * new test exercised the filter directly rather than asserting on a
+ * `BadGatewayException` built by hand.
+ *
+ * This filter had no such bug: both failures reaching its implicit
+ * default (`YoutubeApiUnavailableFailure`,
+ * `RealtimeStateUnavailableFailure`) do belong at 502. But that was a
+ * coincidence of content, not a guarantee of structure — a future
+ * failure added to `@Catch()` without a branch of its own would have
+ * landed at 502 by the same silent default, whether or not 502 was
+ * correct for it. The explicit table below removes the coincidence:
+ * every case is named, and an unnamed one is a compile-time gap in the
+ * `switch`, not a runtime surprise.
+ *
+ * @see VideoSessionController
+ * @competency Separation of concerns; domain does not depend on HTTP
  */
+type VideoSessionDomainFailure =
+  | InvalidYoutubeVideoIdFailure
+  | YoutubeVideoNotFoundFailure
+  | VideoSessionNotFoundFailure
+  | YoutubeApiUnavailableFailure
+  | RealtimeStateUnavailableFailure;
+
 @Catch(
   InvalidYoutubeVideoIdFailure,
   YoutubeVideoNotFoundFailure,
-  YoutubeApiUnavailableFailure,
   VideoSessionNotFoundFailure,
+  YoutubeApiUnavailableFailure,
   RealtimeStateUnavailableFailure,
 )
 export class VideoSessionExceptionFilter implements ExceptionFilter {
-  catch(
-    exception:
-      | InvalidYoutubeVideoIdFailure
-      | YoutubeVideoNotFoundFailure
-      | YoutubeApiUnavailableFailure
-      | VideoSessionNotFoundFailure
-      | RealtimeStateUnavailableFailure,
-    host: ArgumentsHost,
-  ): void {
+  catch(exception: VideoSessionDomainFailure, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
 
-    if (
-      exception instanceof InvalidYoutubeVideoIdFailure ||
-      exception instanceof YoutubeVideoNotFoundFailure
-    ) {
-      const httpException = new BadRequestException(exception.message);
-      response
-        .status(httpException.getStatus())
-        .json(httpException.getResponse());
-      return;
-    }
+    const httpException = this.toHttpException(exception);
 
-    if (exception instanceof VideoSessionNotFoundFailure) {
-      const httpException = new NotFoundException(exception.message);
-      response
-        .status(httpException.getStatus())
-        .json(httpException.getResponse());
-      return;
-    }
-
-    const httpException = new BadGatewayException(exception.message);
     response
       .status(httpException.getStatus())
       .json(httpException.getResponse());
+  }
+
+  private toHttpException(
+    exception: VideoSessionDomainFailure,
+  ): BadGatewayException | BadRequestException | NotFoundException {
+    switch (true) {
+      case exception instanceof InvalidYoutubeVideoIdFailure:
+      case exception instanceof YoutubeVideoNotFoundFailure:
+        // Same status for both: from the caller's perspective this is
+        // one class of error — "this id does not resolve to a usable
+        // video" — whether the id was malformed or merely unknown to
+        // YouTube.
+        return new BadRequestException(exception.message);
+
+      case exception instanceof VideoSessionNotFoundFailure:
+        return new NotFoundException(exception.message);
+
+      case exception instanceof YoutubeApiUnavailableFailure:
+      case exception instanceof RealtimeStateUnavailableFailure:
+        // Both mean "the request was well formed and authorised, but
+        // an upstream dependency could not fulfil it" — the YouTube
+        // Data API in one case, the Realtime Database write in the
+        // other (B-V03). The client's recovery is the same either way:
+        // retry the creation.
+        return new BadGatewayException(exception.message);
+
+      default:
+        // Unreachable given VideoSessionDomainFailure and @Catch()
+        // above stay in sync — a mismatch between the two is exactly
+        // what this filter's own spec checks for directly. Kept,
+        // rather than omitted, purely to satisfy TypeScript's
+        // control-flow analysis: a `switch(true)` over `instanceof`
+        // guards is not recognized as exhaustive even when the union
+        // is.
+        return new BadGatewayException(
+          (exception as Error).message ?? 'Unhandled video session failure.',
+        );
+    }
   }
 }
