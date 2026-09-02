@@ -1,5 +1,4 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
 
 import { AuthController } from '../../../../src/auth/presentation/controllers/auth.controller';
 import { RegisterUseCase } from '../../../../src/auth/domain/usecases/register.usecase';
@@ -30,6 +29,10 @@ import { RefreshParams } from '../../../../src/auth/domain/usecases/refresh.para
 import { LogoutParams } from '../../../../src/auth/domain/usecases/logout.params';
 import { GetCurrentUserParams } from '../../../../src/auth/domain/usecases/get-current-user.params';
 import { AuthenticatedUser } from '../../../../src/auth/presentation/interfaces/authenticated-user.interface';
+import { IssueFirebaseTokenUseCase } from '../../../../src/auth/domain/usecases/issue-firebase-token.usecase';
+import { FirebaseTokenUnavailableFailure } from '../../../../src/auth/domain/failures/firebase-token.failure';
+import { FirebaseTokenResponseDto } from '../../../../src/auth/presentation/dtos/firebase-token-response.dto';
+import { IssueFirebaseTokenParams } from '../../../../src/auth/domain/usecases/issue-firebase-token.params';
 
 /**
  * Unit tests for AuthController.
@@ -65,6 +68,9 @@ describe('AuthController', () => {
     jest.fn();
   const getCurrentUserExecute: jest.MockedFunction<
     GetCurrentUserUseCase['execute']
+  > = jest.fn();
+  const issueFirebaseTokenExecute: jest.MockedFunction<
+    IssueFirebaseTokenUseCase['execute']
   > = jest.fn();
 
   const MOCK_USER = new UserEntity({
@@ -104,6 +110,7 @@ describe('AuthController', () => {
     refreshExecute.mockReset();
     logoutExecute.mockReset();
     getCurrentUserExecute.mockReset();
+    issueFirebaseTokenExecute.mockReset();
 
     const module: TestingModule = await Test.createTestingModule({
       controllers: [AuthController],
@@ -115,6 +122,10 @@ describe('AuthController', () => {
         {
           provide: GetCurrentUserUseCase,
           useValue: { execute: getCurrentUserExecute },
+        },
+        {
+          provide: IssueFirebaseTokenUseCase,
+          useValue: { execute: issueFirebaseTokenExecute },
         },
       ],
     }).compile();
@@ -488,42 +499,53 @@ describe('AuthController', () => {
     });
   });
 
-  // --- DomainExceptionFilter HTTP mappings (unit verification) ---
+  describe('firebaseToken()', () => {
+    it('should read the userId exclusively from the validated token (A-FBT-03)', async () => {
+      issueFirebaseTokenExecute.mockResolvedValue('mock.custom.token');
 
-  describe('DomainExceptionFilter HTTP mappings', () => {
-    it('should map EmailAlreadyInUseFailure to ConflictException (409)', () => {
-      const failure = new EmailAlreadyInUseFailure('dup@example.com');
-      const httpException = new ConflictException(failure.message);
+      await authController.firebaseToken(AUTHENTICATED_USER);
 
-      expect(httpException.getStatus()).toBe(409);
+      expect(issueFirebaseTokenExecute).toHaveBeenCalledWith(
+        new IssueFirebaseTokenParams({ userId: AUTHENTICATED_USER.userId }),
+      );
     });
 
-    it('should map InvalidCredentialsFailure to UnauthorizedException (401)', () => {
-      const failure = new InvalidCredentialsFailure();
-      const httpException = new UnauthorizedException(failure.message);
+    it('should wrap the token in a FirebaseTokenResponseDto (A-FBT-01)', async () => {
+      issueFirebaseTokenExecute.mockResolvedValue('mock.custom.token');
 
-      expect(httpException.getStatus()).toBe(401);
+      const result = await authController.firebaseToken(AUTHENTICATED_USER);
+
+      expect(result).toBeInstanceOf(FirebaseTokenResponseDto);
+      expect(result.firebaseToken).toBe('mock.custom.token');
     });
 
-    it('should map InvalidRefreshTokenFailure to UnauthorizedException (401)', () => {
-      const failure = new InvalidRefreshTokenFailure();
-      const httpException = new UnauthorizedException(failure.message);
+    it('should return the token and nothing else', async () => {
+      // The response body must not echo the uid: a credential that
+      // names the identity it grants is easier to misuse if it is ever
+      // logged or leaked.
+      issueFirebaseTokenExecute.mockResolvedValue('mock.custom.token');
 
-      expect(httpException.getStatus()).toBe(401);
+      const result = await authController.firebaseToken(AUTHENTICATED_USER);
+
+      expect(Object.keys({ ...result })).toEqual(['firebaseToken']);
     });
 
-    it('should map UserNotFoundFailure to UnauthorizedException (401)', () => {
-      const failure = new UserNotFoundFailure();
-      const httpException = new UnauthorizedException(failure.message);
+    it('should propagate FirebaseTokenUnavailableFailure as-is (A-FBT-04)', async () => {
+      issueFirebaseTokenExecute.mockRejectedValue(
+        new FirebaseTokenUnavailableFailure('credentials rejected'),
+      );
 
-      expect(httpException.getStatus()).toBe(401);
+      await expect(
+        authController.firebaseToken(AUTHENTICATED_USER),
+      ).rejects.toThrow(FirebaseTokenUnavailableFailure);
     });
 
-    it('should use the same message for both wrong password and unknown email', () => {
-      const failure1 = new InvalidCredentialsFailure();
-      const failure2 = new InvalidCredentialsFailure();
+    it('should propagate UserNotFoundFailure as-is (A-FBT-02)', async () => {
+      issueFirebaseTokenExecute.mockRejectedValue(new UserNotFoundFailure());
 
-      expect(failure1.message).toBe(failure2.message);
+      await expect(
+        authController.firebaseToken(AUTHENTICATED_USER),
+      ).rejects.toThrow(UserNotFoundFailure);
     });
   });
 });
